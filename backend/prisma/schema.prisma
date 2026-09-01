@@ -1,0 +1,329 @@
+// ============================================================
+// Logic Rays Technology – HRM Portal
+// Prisma Schema (PostgreSQL)
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Enums ----------
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  ARCHIVED
+}
+
+enum TimeLogStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum LeaveRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+// ---------- Role & Permission (RBAC) ----------
+model Role {
+  id          String           @id @default(cuid())
+  name        String           @unique
+  displayName String
+  description String?
+  isSpecial   Boolean          @default(false)
+  isSystem    Boolean          @default(false)
+  priority    Int              @default(0)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  users          User[]
+  rolePermissions RolePermission[]
+
+  @@index([priority])
+}
+
+model Permission {
+  id          String           @id @default(cuid())
+  key         String           @unique // resource:action e.g. leave:approve
+  group       String
+  description String?
+  createdAt   DateTime         @default(now())
+
+  rolePermissions RolePermission[]
+
+  @@index([group])
+}
+
+model RolePermission {
+  id           String     @id @default(cuid())
+  roleId       String
+  permissionId String
+  createdAt    DateTime   @default(now())
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+}
+
+// ---------- Organization ----------
+model Department {
+  id          String    @id @default(cuid())
+  name        String
+  code        String
+  description String?
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  teams Team[]
+  users User[]
+
+  @@index([code])
+  @@index([deletedAt])
+}
+
+model Team {
+  id           String    @id @default(cuid())
+  name         String
+  description  String?
+  departmentId String
+  deletedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  members    TeamMember[]
+  projects   Project[]
+
+  @@index([deletedAt])
+}
+
+model TeamMember {
+  id         String   @id @default(cuid())
+  userId     String
+  teamId     String
+  isTeamLead Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, teamId])
+  @@index([teamId])
+}
+
+// ---------- Users ----------
+model User {
+  id               String      @id @default(cuid())
+  email            String
+  password         String
+  firstName        String
+  lastName         String
+  phone            String?
+  designation      String?
+  roleId           String
+  departmentId     String?
+  status           UserStatus  @default(ACTIVE)
+  isSpecialRole    Boolean     @default(false)
+  specialRoleName  String?
+  mustChangePassword Boolean   @default(false)
+  lastLoginAt      DateTime?
+  lastLoginIp      String?
+  createdBy        String?
+  deletedAt        DateTime?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  role          Role           @relation(fields: [roleId], references: [id])
+  department    Department?    @relation(fields: [departmentId], references: [id])
+  teamMembers   TeamMember[]
+  projectMembers ProjectMember[]
+  timeLogs      TimeLog[]
+  leaveBalances LeaveBalance[]
+  leaveRequests LeaveRequest[]
+  refreshTokens RefreshToken[]
+
+  @@index([roleId])
+  @@index([departmentId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+// ---------- Refresh Tokens ----------
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// ---------- Projects ----------
+model Project {
+  id          String        @id @default(cuid())
+  name        String
+  code        String?
+  description String?
+  status      ProjectStatus @default(PLANNING)
+  teamId      String?
+  createdBy   String?
+  deletedAt   DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  team    Team?           @relation(fields: [teamId], references: [id])
+  members ProjectMember[]
+  timeLogs TimeLog[]
+
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model ProjectMember {
+  id          String  @id @default(cuid())
+  projectId   String
+  userId      String
+  projectRole String?
+  createdAt   DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([userId])
+}
+
+// ---------- Time ----------
+model TimeLog {
+  id          String        @id @default(cuid())
+  userId      String
+  projectId   String?
+  date        DateTime
+  startTime   DateTime
+  endTime     DateTime
+  durationMin Int
+  description String?
+  status      TimeLogStatus @default(PENDING)
+  approvedBy  String?
+  approvedAt  DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([userId, date])
+  @@index([status])
+}
+
+// ---------- Leave ----------
+model LeaveType {
+  id             String  @id @default(cuid())
+  name           String
+  code           String  @unique
+  maxDaysPerYear Int?
+  isPaid         Boolean @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  balances LeaveBalance[]
+  requests LeaveRequest[]
+}
+
+model LeaveBalance {
+  id          String  @id @default(cuid())
+  userId      String
+  leaveTypeId String
+  year        Int
+  allocated   Float  @default(0)
+  used        Float  @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, leaveTypeId, year])
+}
+
+model LeaveRequest {
+  id          String             @id @default(cuid())
+  userId      String
+  leaveTypeId String
+  startDate   DateTime
+  endDate     DateTime
+  days        Float
+  reason      String?
+  status      LeaveRequestStatus @default(PENDING)
+  approvedBy  String?
+  approvedAt  DateTime?
+  cancelledBy String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id])
+
+  @@index([userId, status])
+  @@index([status])
+}
+
+// ---------- Holidays ----------
+model Holiday {
+  id         String   @id @default(cuid())
+  name       String
+  date       DateTime
+  year       Int
+  isOptional Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@unique([date, year])
+  @@index([year])
+}
+
+// ---------- Request Logging / Analytics ----------
+model RequestLog {
+  id           String   @id @default(cuid())
+  method       String
+  url          String
+  statusCode   Int
+  responseTime Int
+  ipAddress    String?
+  userAgent    String?
+  userId       String?
+  requestBody  Json?
+  queryParams  Json?
+  headers      Json?
+  isSuccess    Boolean
+  errorMessage String?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([userId])
+  @@index([statusCode])
+  @@index([ipAddress])
+}

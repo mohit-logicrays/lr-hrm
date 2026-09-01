@@ -1,0 +1,292 @@
+import { PrismaClient, type UserStatus } from "@prisma/client";
+import bcrypt from "bcryptjs";
+import { config } from "../src/config";
+import { PERMISSIONS } from "../src/modules/permissions/permissions.constants";
+
+const prisma = new PrismaClient();
+
+const BCRYPT_COST = 12;
+
+interface RoleSeed {
+  name: string;
+  displayName: string;
+  description?: string;
+  isSpecial: boolean;
+  priority: number;
+  permissions: string[];
+}
+
+const ROLE_SEEDS: RoleSeed[] = [
+  {
+    name: "superadmin",
+    displayName: "Super Admin",
+    description: "Full system access and management",
+    isSpecial: true,
+    priority: 0,
+    permissions: [],
+  },
+  {
+    name: "hr",
+    displayName: "HR Manager",
+    description: "Human resources management",
+    isSpecial: false,
+    priority: 1,
+    permissions: [
+      PERMISSIONS.USER_CREATE,
+      PERMISSIONS.USER_READ,
+      PERMISSIONS.USER_UPDATE,
+      PERMISSIONS.USER_DELETE,
+      PERMISSIONS.USER_ASSIGN_ROLE,
+      PERMISSIONS.USER_MANAGE,
+      PERMISSIONS.ROLE_READ,
+      PERMISSIONS.PERMISSION_READ,
+      PERMISSIONS.DEPARTMENT_CREATE,
+      PERMISSIONS.DEPARTMENT_READ,
+      PERMISSIONS.DEPARTMENT_UPDATE,
+      PERMISSIONS.DEPARTMENT_DELETE,
+      PERMISSIONS.TEAM_CREATE,
+      PERMISSIONS.TEAM_READ,
+      PERMISSIONS.TEAM_UPDATE,
+      PERMISSIONS.TEAM_DELETE,
+      PERMISSIONS.TEAM_MANAGE_MEMBERS,
+      PERMISSIONS.TEAM_MANAGE_LEADS,
+      PERMISSIONS.PROJECT_READ,
+      PERMISSIONS.TIME_LOG_READ_ALL,
+      PERMISSIONS.TIME_LOG_APPROVE,
+      PERMISSIONS.TIME_LOG_MANAGE,
+      PERMISSIONS.LEAVE_TYPE_READ,
+      PERMISSIONS.LEAVE_TYPE_MANAGE,
+      PERMISSIONS.LEAVE_REQUEST_READ_ALL,
+      PERMISSIONS.LEAVE_REQUEST_APPROVE,
+      PERMISSIONS.LEAVE_BALANCE_READ,
+      PERMISSIONS.LEAVE_BALANCE_MANAGE,
+      PERMISSIONS.HOLIDAY_READ,
+      PERMISSIONS.HOLIDAY_MANAGE,
+      PERMISSIONS.REQUEST_LOG_READ,
+    ],
+  },
+  {
+    name: "manager",
+    displayName: "Manager",
+    description: "Team and project manager",
+    isSpecial: false,
+    priority: 2,
+    permissions: [
+      PERMISSIONS.USER_READ,
+      PERMISSIONS.TEAM_READ,
+      PERMISSIONS.DEPARTMENT_READ,
+      PERMISSIONS.PROJECT_CREATE,
+      PERMISSIONS.PROJECT_READ,
+      PERMISSIONS.PROJECT_UPDATE,
+      PERMISSIONS.PROJECT_DELETE,
+      PERMISSIONS.PROJECT_MANAGE_MEMBERS,
+      PERMISSIONS.TIME_LOG_READ_ALL,
+      PERMISSIONS.TIME_LOG_APPROVE,
+      PERMISSIONS.LEAVE_TYPE_READ,
+      PERMISSIONS.LEAVE_REQUEST_READ_ALL,
+      PERMISSIONS.LEAVE_REQUEST_APPROVE,
+      PERMISSIONS.LEAVE_BALANCE_READ,
+      PERMISSIONS.HOLIDAY_READ,
+    ],
+  },
+  {
+    name: "lead",
+    displayName: "Team Lead",
+    description: "Team lead with limited management",
+    isSpecial: false,
+    priority: 3,
+    permissions: [
+      PERMISSIONS.USER_READ,
+      PERMISSIONS.TEAM_READ,
+      PERMISSIONS.DEPARTMENT_READ,
+      PERMISSIONS.PROJECT_READ,
+      PERMISSIONS.TIME_LOG_CREATE,
+      PERMISSIONS.TIME_LOG_READ_OWN,
+      PERMISSIONS.TIME_LOG_READ_ALL,
+      PERMISSIONS.LEAVE_TYPE_READ,
+      PERMISSIONS.LEAVE_REQUEST_CREATE,
+      PERMISSIONS.LEAVE_REQUEST_READ_OWN,
+      PERMISSIONS.LEAVE_BALANCE_READ,
+      PERMISSIONS.HOLIDAY_READ,
+    ],
+  },
+  {
+    name: "associate",
+    displayName: "Associate",
+    description: "Regular associate/staff member",
+    isSpecial: false,
+    priority: 4,
+    permissions: [
+      PERMISSIONS.USER_READ,
+      PERMISSIONS.TEAM_READ,
+      PERMISSIONS.DEPARTMENT_READ,
+      PERMISSIONS.PROJECT_READ,
+      PERMISSIONS.TIME_LOG_CREATE,
+      PERMISSIONS.TIME_LOG_READ_OWN,
+      PERMISSIONS.LEAVE_TYPE_READ,
+      PERMISSIONS.LEAVE_REQUEST_CREATE,
+      PERMISSIONS.LEAVE_REQUEST_READ_OWN,
+      PERMISSIONS.LEAVE_BALANCE_READ,
+      PERMISSIONS.HOLIDAY_READ,
+    ],
+  },
+  {
+    name: "member",
+    displayName: "Member",
+    description: "Basic member",
+    isSpecial: false,
+    priority: 5,
+    permissions: [
+      PERMISSIONS.TIME_LOG_CREATE,
+      PERMISSIONS.TIME_LOG_READ_OWN,
+      PERMISSIONS.LEAVE_TYPE_READ,
+      PERMISSIONS.LEAVE_REQUEST_CREATE,
+      PERMISSIONS.LEAVE_REQUEST_READ_OWN,
+      PERMISSIONS.LEAVE_BALANCE_READ,
+      PERMISSIONS.HOLIDAY_READ,
+    ],
+  },
+];
+
+const SPECIAL_ROLES = [
+  { name: "founder", displayName: "Founder", priority: 0 },
+  { name: "ceo", displayName: "CEO", priority: 1 },
+  { name: "cto", displayName: "CTO", priority: 2 },
+  { name: "coo", displayName: "COO", priority: 3 },
+  { name: "cfo", displayName: "CFO", priority: 4 },
+];
+
+async function seedPermissions(): Promise<void> {
+  const permissionSeeds = Object.entries(PERMISSIONS).map(([group, key]) => ({
+    key,
+    group: key.split(":")[0],
+  }));
+
+  for (const seed of permissionSeeds) {
+    await prisma.permission.upsert({
+      where: { key: seed.key },
+      update: { group: seed.group },
+      create: { key: seed.key, group: seed.group },
+    });
+  }
+}
+
+async function seedRoles(): Promise<void> {
+  for (const role of ROLE_SEEDS) {
+    const existing = await prisma.role.findUnique({ where: { name: role.name } });
+    if (existing) {
+      await prisma.role.update({
+        where: { name: role.name },
+        data: {
+          displayName: role.displayName,
+          description: role.description,
+          priority: role.priority,
+        },
+      });
+      if (role.permissions.length > 0) {
+        const permissions = await prisma.permission.findMany({
+          where: { key: { in: role.permissions } },
+          select: { id: true },
+        });
+        await prisma.rolePermission.createMany({
+          data: permissions.map((p) => ({ roleId: existing.id, permissionId: p.id })),
+          skipDuplicates: true,
+        });
+      }
+      continue;
+    }
+
+    const created = await prisma.role.create({
+      data: {
+        name: role.name,
+        displayName: role.displayName,
+        description: role.description,
+        isSpecial: role.isSpecial,
+        isSystem: true,
+        priority: role.priority,
+      },
+    });
+
+    if (role.permissions.length > 0) {
+      const permissions = await prisma.permission.findMany({
+        where: { key: { in: role.permissions } },
+        select: { id: true },
+      });
+      await prisma.rolePermission.createMany({
+        data: permissions.map((p) => ({ roleId: created.id, permissionId: p.id })),
+      });
+    }
+  }
+
+  for (const special of SPECIAL_ROLES) {
+    await prisma.role.upsert({
+      where: { name: special.name },
+      update: { displayName: special.displayName, priority: special.priority, isSpecial: true },
+      create: {
+        name: special.name,
+        displayName: special.displayName,
+        isSpecial: true,
+        isSystem: true,
+        priority: special.priority,
+      },
+    });
+  }
+}
+
+async function seedSuperUser(): Promise<void> {
+  const email = config.superuser.email;
+  const password = config.superuser.password;
+  const role = await prisma.role.findUnique({ where: { name: "superadmin" } });
+  if (!role) throw new Error("superadmin role not seeded");
+
+  const existing = await prisma.user.findUnique({ where: { email } });
+  const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
+
+  if (existing) {
+    await prisma.user.update({
+      where: { email },
+      data: {
+        roleId: role.id,
+        isSpecialRole: true,
+        specialRoleName: "Super Admin",
+        status: "ACTIVE" as UserStatus,
+        password: passwordHash,
+        mustChangePassword: false,
+      },
+    });
+    return;
+  }
+
+  await prisma.user.create({
+    data: {
+      email,
+      password: passwordHash,
+      firstName: "Super",
+      lastName: "Admin",
+      designation: "Super Admin",
+      roleId: role.id,
+      isSpecialRole: true,
+      specialRoleName: "Super Admin",
+      status: "ACTIVE",
+      mustChangePassword: false,
+    },
+  });
+}
+
+async function main(): Promise<void> {
+  await seedPermissions();
+  await seedRoles();
+  await seedSuperUser();
+  // eslint-disable-next-line no-console
+  console.log("Seed completed successfully");
+}
+
+main()
+  .catch((e) => {
+    // eslint-disable-next-line no-console
+    console.error("Seed failed:", e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

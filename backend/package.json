@@ -1,25 +1,54 @@
 {
-  "name": "hrm-backend",
+  "name": "logicrays-hrm-backend",
   "version": "1.0.0",
-  "description": "HRM project backend - Node.js, Express, MongoDB",
-  "main": "server.js",
+  "description": "Logic Rays Technology - Enterprise HRM Portal Backend (Prisma + PostgreSQL + TypeScript)",
+  "main": "dist/server.js",
   "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon --exec tsx src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
+    "prisma:seed": "tsx prisma/seed.ts",
+    "db:reset": "prisma migrate reset --force"
   },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "keywords": [
+    "hrm",
+    "logicrays",
+    "express",
+    "prisma",
+    "postgresql",
+    "typescript"
+  ],
+  "author": "Logic Rays Technology",
+  "license": "UNLICENSED",
   "dependencies": {
-    "bcryptjs": "^3.0.3",
+    "@prisma/client": "^6.0.0",
+    "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
-    "express": "^4.19.2",
-    "jsonwebtoken": "^9.0.3",
-    "mongoose": "^8.5.0",
-    "nodemailer": "^9.0.5",
-    "zod": "^4.4.3"
+    "express": "^4.21.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.4"
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cookie-parser": "^1.4.7",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/node": "^22.0.0",
+    "nodemon": "^3.1.0",
+    "prisma": "^6.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
   }
 }

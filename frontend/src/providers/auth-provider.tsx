@@ -77,7 +77,7 @@ export const useAuth = () => useContext(AuthContext);
 /** Centralized client-side permission check — mirrors backend authorize() */
 export function usePermission(modelName: string) {
   const { user, permissions } = useAuth();
-  if (user?.role === "superuser") {
+  if (user?.role === "superadmin") {
     return { create: true, read: true, update: true, delete: true };
   }
   return permissions[modelName] ?? {};
