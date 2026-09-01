@@ -1,15 +1,48 @@
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
-export interface User {
+export interface Role {
   id: string;
   name: string;
+  displayName: string;
+  description?: string;
+  isSpecial?: boolean;
+  priority?: number;
+}
+
+export interface Department {
+  id: string;
+  name: string;
+  code: string;
+}
+
+export interface User {
+  id: string;
+  name?: string;
   email: string;
-  role: string;
-  designation?: string;
-  phone?: string;
-  isActive?: boolean;
+  role: string | Role;
+  designation?: string | null;
+  phone?: string | null;
+  firstName?: string;
+  lastName?: string;
+  status?: string;
+  department?: Department | null;
+  departmentId?: string | null;
+  isSpecialRole?: boolean;
+  specialRoleName?: string | null;
   mustChangePassword?: boolean;
-  permissionGroups?: { _id: string; name: string }[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CreateUserPayload {
+  email: string;
+  firstName: string;
+  lastName: string;
+  phone?: string | null;
+  designation?: string | null;
+  roleId: string;
+  departmentId?: string | null;
+  status?: "ACTIVE" | "INACTIVE" | "SUSPENDED";
 }
 
 export interface Pagination {
@@ -65,12 +98,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   login: (email: string, password: string) =>
-    request<{ success: boolean; data: User }>("/api/auth/login", {
+    request<{ success: boolean; data: User }>("/api/v1/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
     }),
 
-  logout: () => request<void>("/api/auth/logout", { method: "POST" }),
+  logout: () => request<void>("/api/v1/auth/logout", { method: "POST" }),
 
   me: () =>
     request<{
@@ -79,7 +112,10 @@ export const api = {
         user: User & { permissionOverrides?: unknown[] };
         permissions: Record<string, Record<string, boolean>>;
       };
-    }>("/api/auth/me"),
+    }>("/api/v1/auth/me"),
+
+  listRoles: () =>
+    request<{ success: boolean; message: string; data: Role[] }>("/api/v1/roles"),
 
   listUsers: (page = 1, pageSize = 10, search = "") => {
     const params = new URLSearchParams({
@@ -87,26 +123,26 @@ export const api = {
       pageSize: String(pageSize),
     });
     if (search) params.set("search", search);
-    return request<ListResponse<User>>(`/api/users?${params}`);
+    return request<ListResponse<User>>(`/api/v1/users?${params}`);
   },
 
-  createUser: (payload: Partial<User>) =>
-    request<{ success: boolean; message: string; data: User }>("/api/users", {
+  createUser: (payload: CreateUserPayload) =>
+    request<{ success: boolean; message: string; data: User }>("/api/v1/users", {
       method: "POST",
       body: JSON.stringify(payload),
     }),
 
   updateUser: (id: string, payload: Partial<User>) =>
-    request<{ success: boolean; data: User }>(`/api/users/${id}`, {
+    request<{ success: boolean; data: User }>(`/api/v1/users/${id}`, {
       method: "PUT",
       body: JSON.stringify(payload),
     }),
 
   deleteUser: (id: string) =>
-    request<void>(`/api/users/${id}`, { method: "DELETE" }),
+    request<void>(`/api/v1/users/${id}`, { method: "DELETE" }),
 
   updateProfile: (payload: Partial<User>) =>
-    request<{ success: boolean; data: User }>("/api/users/me/profile", {
+    request<{ success: boolean; data: User }>("/api/v1/users/me/profile", {
       method: "PUT",
       body: JSON.stringify(payload),
     }),

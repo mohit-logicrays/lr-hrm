@@ -119,7 +119,7 @@ export class UserService {
   }
 
   async update(id: string, data: UpdateUserInput) {
-    const existing = await prisma.user.findUnique({ where: { id } });
+    const existing = await prisma.user.findFirst({ where: { id, deletedAt: null } });
     if (!existing) throw new AppError(404, "User not found");
 
     const roleId = data.roleId ?? existing.roleId;
@@ -146,18 +146,18 @@ export class UserService {
   }
 
   async remove(id: string) {
-    const existing = await prisma.user.findUnique({ where: { id } });
+    const existing = await prisma.user.findFirst({ where: { id, deletedAt: null } });
     if (!existing) throw new AppError(404, "User not found");
 
-    // Soft delete: set status to INACTIVE
+    // Soft delete: mark deletedAt (status also set to INACTIVE)
     await prisma.user.update({
       where: { id },
-      data: { status: "INACTIVE" },
+      data: { status: "INACTIVE", deletedAt: new Date() },
     });
   }
 
   async changePassword(id: string, oldPassword: string, newPassword: string) {
-    const user = await prisma.user.findUnique({ where: { id } });
+    const user = await prisma.user.findFirst({ where: { id, deletedAt: null } });
     if (!user) throw new AppError(404, "User not found");
 
     const valid = await comparePassword(oldPassword, user.password);
@@ -174,7 +174,7 @@ export class UserService {
     id: string,
     data: { firstName?: string; lastName?: string; phone?: string | null; designation?: string | null }
   ) {
-    const user = await prisma.user.findUnique({ where: { id } });
+    const user = await prisma.user.findFirst({ where: { id, deletedAt: null } });
     if (!user) throw new AppError(404, "User not found");
 
     return prisma.user.update({

@@ -25,6 +25,7 @@ export class TeamService {
     const limit = params.limit ?? 10;
 
     const where: Prisma.TeamWhereInput = {
+      deletedAt: null,
       ...(params.departmentId ? { departmentId: params.departmentId } : {}),
       ...(params.search
         ? {
@@ -61,8 +62,8 @@ export class TeamService {
   }
 
   async getById(id: string) {
-    const team = await prisma.team.findUnique({
-      where: { id },
+    const team = await prisma.team.findFirst({
+      where: { id, deletedAt: null },
       select: {
         ...teamSelect,
         members: {
@@ -87,11 +88,13 @@ export class TeamService {
   }
 
   async create(data: CreateTeamInput) {
-    const department = await prisma.department.findUnique({ where: { id: data.departmentId } });
+    const department = await prisma.department.findFirst({
+      where: { id: data.departmentId, deletedAt: null },
+    });
     if (!department) throw new AppError(404, "Department not found");
 
     const existing = await prisma.team.findFirst({
-      where: { name: data.name, departmentId: data.departmentId },
+      where: { name: data.name, departmentId: data.departmentId, deletedAt: null },
     });
     if (existing) throw new AppError(409, "Team with this name already exists in the department");
 
@@ -99,11 +102,13 @@ export class TeamService {
   }
 
   async update(id: string, data: UpdateTeamInput) {
-    const existing = await prisma.team.findUnique({ where: { id } });
+    const existing = await prisma.team.findFirst({ where: { id, deletedAt: null } });
     if (!existing) throw new AppError(404, "Team not found");
 
     if (data.departmentId) {
-      const department = await prisma.department.findUnique({ where: { id: data.departmentId } });
+      const department = await prisma.department.findFirst({
+        where: { id: data.departmentId, deletedAt: null },
+      });
       if (!department) throw new AppError(404, "Department not found");
     }
 
@@ -111,22 +116,29 @@ export class TeamService {
   }
 
   async remove(id: string) {
-    const existing = await prisma.team.findUnique({ where: { id } });
+    const existing = await prisma.team.findFirst({ where: { id, deletedAt: null } });
     if (!existing) throw new AppError(404, "Team not found");
 
-    const projectCount = await prisma.project.count({ where: { teamId: id } });
+    const projectCount = await prisma.project.count({
+      where: { teamId: id, deletedAt: null },
+    });
     if (projectCount > 0) {
       throw new AppError(409, "Cannot delete team with projects. Unassign projects first.");
     }
 
-    await prisma.team.delete({ where: { id } });
+    await prisma.team.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
   }
 
   async addMember(data: AddMemberInput) {
-    const team = await prisma.team.findUnique({ where: { id: data.teamId } });
+    const team = await prisma.team.findFirst({
+      where: { id: data.teamId, deletedAt: null },
+    });
     if (!team) throw new AppError(404, "Team not found");
 
-    const user = await prisma.user.findUnique({ where: { id: data.userId } });
+    const user = await prisma.user.findFirst({ where: { id: data.userId, deletedAt: null } });
     if (!user) throw new AppError(404, "User not found");
 
     const existing = await prisma.teamMember.findUnique({

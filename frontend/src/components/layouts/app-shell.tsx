@@ -40,7 +40,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const initials = user.name
+  const displayName = user.name?.trim() || user.email;
+  const initials = displayName
     .split(" ")
     .map((n) => n[0])
     .slice(0, 2)
@@ -70,7 +71,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuLabel>
-                  <div className="text-sm font-semibold">{user.name}</div>
+                  <div className="text-sm font-semibold">{displayName}</div>
                   <div className="text-xs font-normal text-text-tertiary">
                     {user.email}
                   </div>

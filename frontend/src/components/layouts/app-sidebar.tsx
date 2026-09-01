@@ -57,7 +57,7 @@ export function AppSidebar() {
                     key={item.href}
                     item={item}
                     active={pathname === item.href}
-                    role={user?.role}
+                    role={typeof user?.role === "string" ? user.role : user?.role?.name}
                   />
                 ))}
               </SidebarMenu>
@@ -68,7 +68,7 @@ export function AppSidebar() {
           <div className="px-4 py-3 text-xs text-text-tertiary">
             Signed in as{" "}
             <span className="font-medium text-text-secondary">
-              {user?.role}
+              {typeof user?.role === "string" ? user.role : user?.role?.name}
             </span>
           </div>
         </SidebarFooter>
@@ -89,7 +89,7 @@ function NavButton({
   // Superuser sees everything; others need read permission on the module model
   const canRead = usePermission(item.requiresPermission ?? "")?.read;
 
-  if (item.requiresPermission && role !== "superuser" && !canRead) {
+  if (item.requiresPermission && role !== "superadmin" && !canRead) {
     return null;
   }
 

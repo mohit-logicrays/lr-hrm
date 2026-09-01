@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, FormEvent } from "react";
 import { toast } from "sonner";
-import { api, ListResponse, Pagination, User } from "@/lib/api";
+import { api, ListResponse, Pagination, Role, User } from "@/lib/api";
 import { usePermission } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,13 +28,17 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronLeft, ChevronRight, Plus, Search } from "lucide-react";
 
-const ROLES = [
-  "hr",
-  "team_lead",
-  "project_manager",
-  "project_lead",
-  "member",
-] as const;
+function displayName(u: User): string {
+  return (
+    u.name?.trim() ||
+    [u.firstName, u.lastName].filter((p): p is string => Boolean(p)).join(" ") ||
+    u.email
+  );
+}
+
+function roleName(u: User): string {
+  return typeof u.role === "string" ? u.role : u.role.displayName || u.role.name;
+}
 
 export default function UsersPage() {
   const perms = usePermission("user");
@@ -120,20 +124,22 @@ export default function UsersPage() {
             ) : (
               result?.data.map((u) => (
                 <TableRow key={u.id}>
-                  <TableCell className="font-medium">{u.name}</TableCell>
+                  <TableCell className="font-medium">{displayName(u)}</TableCell>
                   <TableCell className="text-text-secondary">
                     {u.email}
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline" className="capitalize">
-                      {u.role.replace("_", " ")}
+                      {roleName(u)}
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    {u.isActive !== false ? (
+                    {u.status === "ACTIVE" ? (
                       <span className="text-success">Active</span>
                     ) : (
-                      <span className="text-error">Inactive</span>
+                      <span className="text-error">
+                        {u.status ? u.status.charAt(0) + u.status.slice(1).toLowerCase() : "Inactive"}
+                      </span>
                     )}
                   </TableCell>
                 </TableRow>
@@ -181,27 +187,54 @@ function CreateUserDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [form, setForm] = useState({
-    name: "",
+    firstName: "",
+    lastName: "",
     email: "",
-    role: "member",
+    roleId: "",
     designation: "",
     phone: "",
   });
+
+  useEffect(() => {
+    if (!open || roles.length > 0) return;
+    api
+      .listRoles()
+      .then((res) => {
+        setRoles(res.data);
+        if (!form.roleId && res.data[0]) {
+          setForm((f) => ({ ...f, roleId: res.data[0].id }));
+        }
+      })
+      .catch((err) =>
+        toast.error(err instanceof Error ? err.message : "Failed to load roles")
+      );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setSaving(true);
     try {
-      const res = await api.createUser(form as Partial<User>);
-      const sent = (res.data as User & { emailSent?: boolean }).emailSent;
-      toast.success(
-        sent
-          ? `User created — credentials emailed to ${res.data.email}`
-          : "User created — email failed to send"
-      );
+      const res = await api.createUser({
+        email: form.email,
+        firstName: form.firstName,
+        lastName: form.lastName,
+        roleId: form.roleId,
+        designation: form.designation || null,
+        phone: form.phone || null,
+      });
+      toast.success(`User created — ${res.data.email}`);
       setOpen(false);
-      setForm({ name: "", email: "", role: "member", designation: "", phone: "" });
+      setForm({
+        firstName: "",
+        lastName: "",
+        email: "",
+        roleId: roles[0]?.id ?? "",
+        designation: "",
+        phone: "",
+      });
       onCreated();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create user");
@@ -217,18 +250,34 @@ function CreateUserDialog({
         <DialogHeader>
           <DialogTitle>Create user</DialogTitle>
           <DialogDescription>
-            A random password will be generated and emailed to the user.
+            A default password will be set; the user can change it after first
+            login.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="name">Name</Label>
-            <Input
-              id="name"
-              required
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="firstName">First name</Label>
+              <Input
+                id="firstName"
+                required
+                value={form.firstName}
+                onChange={(e) =>
+                  setForm({ ...form, firstName: e.target.value })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="lastName">Last name</Label>
+              <Input
+                id="lastName"
+                required
+                value={form.lastName}
+                onChange={(e) =>
+                  setForm({ ...form, lastName: e.target.value })
+                }
+              />
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
@@ -246,12 +295,13 @@ function CreateUserDialog({
               <select
                 id="role"
                 className="h-10 w-full rounded-md border border-border-base bg-surface px-3 text-sm"
-                value={form.role}
-                onChange={(e) => setForm({ ...form, role: e.target.value })}
+                value={form.roleId}
+                onChange={(e) => setForm({ ...form, roleId: e.target.value })}
               >
-                {ROLES.map((r) => (
-                  <option key={r} value={r}>
-                    {r.replace("_", " ")}
+                {roles.length === 0 && <option value="">Loading…</option>}
+                {roles.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.displayName || r.name}
                   </option>
                 ))}
               </select>
@@ -267,8 +317,16 @@ function CreateUserDialog({
               />
             </div>
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="phone">Phone</Label>
+            <Input
+              id="phone"
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+            />
+          </div>
           <DialogFooter>
-            <Button type="submit" disabled={saving}>
+            <Button type="submit" disabled={saving || !form.roleId}>
               {saving ? "Creating…" : "Create user"}
             </Button>
           </DialogFooter>

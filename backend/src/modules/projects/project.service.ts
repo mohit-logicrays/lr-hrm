@@ -34,6 +34,7 @@ export class ProjectService {
     const limit = params.limit ?? 10;
 
     const where: Prisma.ProjectWhereInput = {
+      deletedAt: null,
       ...(params.status ? { status: params.status as never } : {}),
       ...(params.teamId ? { teamId: params.teamId } : {}),
       ...(params.search
@@ -71,8 +72,8 @@ export class ProjectService {
   }
 
   async getById(id: string) {
-    const project = await prisma.project.findUnique({
-      where: { id },
+    const project = await prisma.project.findFirst({
+      where: { id, deletedAt: null },
       select: {
         ...projectSelect,
         members: {
@@ -98,12 +99,16 @@ export class ProjectService {
 
   async create(data: CreateProjectInput, createdBy?: string) {
     if (data.code) {
-      const existing = await prisma.project.findUnique({ where: { code: data.code } });
+      const existing = await prisma.project.findFirst({
+        where: { code: data.code, deletedAt: null },
+      });
       if (existing) throw new AppError(409, "Project with this code already exists");
     }
 
     if (data.teamId) {
-      const team = await prisma.team.findUnique({ where: { id: data.teamId } });
+      const team = await prisma.team.findFirst({
+        where: { id: data.teamId, deletedAt: null },
+      });
       if (!team) throw new AppError(404, "Team not found");
     }
 
@@ -114,11 +119,13 @@ export class ProjectService {
   }
 
   async update(id: string, data: UpdateProjectInput) {
-    const existing = await prisma.project.findUnique({ where: { id } });
+    const existing = await prisma.project.findFirst({ where: { id, deletedAt: null } });
     if (!existing) throw new AppError(404, "Project not found");
 
     if (data.teamId) {
-      const team = await prisma.team.findUnique({ where: { id: data.teamId } });
+      const team = await prisma.team.findFirst({
+        where: { id: data.teamId, deletedAt: null },
+      });
       if (!team) throw new AppError(404, "Team not found");
     }
 
@@ -126,16 +133,22 @@ export class ProjectService {
   }
 
   async remove(id: string) {
-    const existing = await prisma.project.findUnique({ where: { id } });
+    const existing = await prisma.project.findFirst({ where: { id, deletedAt: null } });
     if (!existing) throw new AppError(404, "Project not found");
-    await prisma.project.delete({ where: { id } });
+
+    await prisma.project.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
   }
 
   async addMember(data: AddProjectMemberInput) {
-    const project = await prisma.project.findUnique({ where: { id: data.projectId } });
+    const project = await prisma.project.findFirst({
+      where: { id: data.projectId, deletedAt: null },
+    });
     if (!project) throw new AppError(404, "Project not found");
 
-    const user = await prisma.user.findUnique({ where: { id: data.userId } });
+    const user = await prisma.user.findFirst({ where: { id: data.userId, deletedAt: null } });
     if (!user) throw new AppError(404, "User not found");
 
     const existing = await prisma.projectMember.findUnique({

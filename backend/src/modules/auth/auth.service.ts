@@ -48,8 +48,8 @@ export class AuthService {
     password: string,
     ip?: string | null
   ): Promise<LoginResult> {
-    const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
+    const user = await prisma.user.findFirst({
+      where: { email: email.toLowerCase(), deletedAt: null },
       include: { role: true },
     });
 
@@ -114,8 +114,8 @@ export class AuthService {
       throw new AppError(401, "Refresh token has expired or been revoked");
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: payload.sub },
+    const user = await prisma.user.findFirst({
+      where: { id: payload.sub, deletedAt: null },
       include: { role: true },
     });
 
@@ -162,6 +162,7 @@ export class AuthService {
       email: string;
       role: string;
       designation: string | null;
+      phone: string | null;
       departmentId: string | null;
       isSpecialRole: boolean;
       specialRoleName: string | null;
@@ -169,8 +170,8 @@ export class AuthService {
     permissions: Record<string, Record<string, boolean>>;
     permissionKeys: string[];
   }> {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
+    const user = await prisma.user.findFirst({
+      where: { id: userId, deletedAt: null },
       include: { role: true },
     });
 
@@ -185,6 +186,7 @@ export class AuthService {
         email: user.email,
         role: user.role.name,
         designation: user.designation,
+        phone: user.phone,
         departmentId: user.departmentId,
         isSpecialRole: user.isSpecialRole,
         specialRoleName: user.specialRoleName,

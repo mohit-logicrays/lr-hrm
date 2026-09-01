@@ -239,17 +239,18 @@ async function seedSuperUser(): Promise<void> {
   const role = await prisma.role.findUnique({ where: { name: "superadmin" } });
   if (!role) throw new Error("superadmin role not seeded");
 
-  const existing = await prisma.user.findUnique({ where: { email } });
+  const existing = await prisma.user.findFirst({ where: { email } });
   const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
 
   if (existing) {
     await prisma.user.update({
-      where: { email },
+      where: { id: existing.id },
       data: {
         roleId: role.id,
         isSpecialRole: true,
         specialRoleName: "Super Admin",
         status: "ACTIVE" as UserStatus,
+        deletedAt: null,
         password: passwordHash,
         mustChangePassword: false,
       },

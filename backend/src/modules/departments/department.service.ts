@@ -18,14 +18,17 @@ export class DepartmentService {
     const page = params.page ?? 1;
     const limit = params.limit ?? 10;
 
-    const where: Prisma.DepartmentWhereInput = params.search
-      ? {
-          OR: [
-            { name: { contains: params.search, mode: "insensitive" } },
-            { code: { contains: params.search, mode: "insensitive" } },
-          ],
-        }
-      : {};
+    const where: Prisma.DepartmentWhereInput = {
+      deletedAt: null,
+      ...(params.search
+        ? {
+            OR: [
+              { name: { contains: params.search, mode: "insensitive" } },
+              { code: { contains: params.search, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+    };
 
     const [total, data] = await Promise.all([
       prisma.department.count({ where }),
@@ -52,8 +55,8 @@ export class DepartmentService {
   }
 
   async getById(id: string) {
-    const department = await prisma.department.findUnique({
-      where: { id },
+    const department = await prisma.department.findFirst({
+      where: { id, deletedAt: null },
       select: {
         ...departmentSelect,
         teams: { select: { id: true, name: true } },
@@ -64,14 +67,16 @@ export class DepartmentService {
   }
 
   async create(data: CreateDepartmentInput) {
-    const existing = await prisma.department.findUnique({ where: { code: data.code } });
+    const existing = await prisma.department.findFirst({
+      where: { code: data.code, deletedAt: null },
+    });
     if (existing) throw new AppError(409, "Department with this code already exists");
 
     return prisma.department.create({ data, select: departmentSelect });
   }
 
   async update(id: string, data: UpdateDepartmentInput) {
-    const existing = await prisma.department.findUnique({ where: { id } });
+    const existing = await prisma.department.findFirst({ where: { id, deletedAt: null } });
     if (!existing) throw new AppError(404, "Department not found");
 
     return prisma.department.update({
@@ -82,15 +87,20 @@ export class DepartmentService {
   }
 
   async remove(id: string) {
-    const existing = await prisma.department.findUnique({ where: { id } });
+    const existing = await prisma.department.findFirst({ where: { id, deletedAt: null } });
     if (!existing) throw new AppError(404, "Department not found");
 
-    const teamCount = await prisma.team.count({ where: { departmentId: id } });
+    const teamCount = await prisma.team.count({
+      where: { departmentId: id, deletedAt: null },
+    });
     if (teamCount > 0) {
       throw new AppError(409, "Cannot delete department with teams. Remove teams first.");
     }
 
-    await prisma.department.delete({ where: { id } });
+    await prisma.department.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
   }
 }
 

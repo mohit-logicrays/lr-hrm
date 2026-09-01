@@ -66,11 +66,6 @@ app.use("/api/v1/leave", leaveRoutes);
 app.use("/api/v1/holidays", holidayRoutes);
 app.use("/api/v1/requests", requestRoutes);
 
-// Backwards-compat: also serve auth/users at non-versioned paths
-// for the current frontend which hits /api/auth and /api/users
-app.use("/api/auth", authRoutes);
-app.use("/api/users", userRoutes);
-
 app.use(notFoundHandler);
 app.use(errorHandler);
 
