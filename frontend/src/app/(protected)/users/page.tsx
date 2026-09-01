@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useState, FormEvent } from "react";
 import { toast } from "sonner";
-import { api, ListResponse, Pagination, Role, User } from "@/lib/api";
+import { api, Department, ListResponse, Role, User, UserStatus } from "@/lib/api";
 import { usePermission } from "@/providers/auth-provider";
+import { PageHeader } from "@/components/shared/page-header";
+import { PaginationBar } from "@/components/shared/pagination-bar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,10 +25,9 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronLeft, ChevronRight, Plus, Search } from "lucide-react";
+import { Pencil, Plus, Search, Trash2 } from "lucide-react";
 
 function displayName(u: User): string {
   return (
@@ -40,20 +41,20 @@ function roleName(u: User): string {
   return typeof u.role === "string" ? u.role : u.role.displayName || u.role.name;
 }
 
+const USER_STATUSES: UserStatus[] = ["ACTIVE", "INACTIVE", "SUSPENDED"];
+
 export default function UsersPage() {
   const perms = usePermission("user");
   const [result, setResult] = useState<ListResponse<User> | null>(null);
-  const [pagination, setPagination] = useState<Pagination | null>(null);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [dialog, setDialog] = useState<"create" | { edit: User } | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
     try {
       const res = await api.listUsers(page, 10, search);
       setResult(res);
-      setPagination(res.pagination);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load users");
     } finally {
@@ -65,27 +66,30 @@ export default function UsersPage() {
     load();
   }, [load]);
 
+  async function handleDelete(u: User) {
+    if (!window.confirm(`Delete user "${displayName(u)}"?`)) return;
+    try {
+      await api.deleteUser(u.id);
+      toast.success("User deleted");
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete user");
+    }
+  }
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight text-text-primary">
-            User Management
-          </h1>
-          <p className="text-sm text-text-secondary">
-            {pagination
-              ? `${pagination.total} users total`
-              : "Manage organization members"}
-          </p>
-        </div>
-        {perms.create && (
-          <CreateUserDialog onCreated={() => load()}>
-            <Button className="rounded-md">
+      <PageHeader
+        title="User Management"
+        subtitle={result ? `${result.pagination.total} users` : "Manage organization members"}
+        actions={
+          perms.create ? (
+            <Button onClick={() => setDialog("create")}>
               <Plus /> Create user
             </Button>
-          </CreateUserDialog>
-        )}
-      </div>
+          ) : undefined
+        }
+      />
 
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary" />
@@ -107,14 +111,17 @@ export default function UsersPage() {
               <TableHead>Name</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Role</TableHead>
+              <TableHead>Department</TableHead>
+              <TableHead>Designation</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
-                  {Array.from({ length: 4 }).map((_, j) => (
+                  {Array.from({ length: 7 }).map((_, j) => (
                     <TableCell key={j}>
                       <Skeleton className="h-4 w-full" />
                     </TableCell>
@@ -125,22 +132,38 @@ export default function UsersPage() {
               result?.data.map((u) => (
                 <TableRow key={u.id}>
                   <TableCell className="font-medium">{displayName(u)}</TableCell>
+                  <TableCell className="text-text-secondary">{u.email}</TableCell>
+                  <TableCell>
+                    <Badge className={roleBadgeClass(u)}>{roleName(u)}</Badge>
+                  </TableCell>
                   <TableCell className="text-text-secondary">
-                    {u.email}
+                    {u.department?.name ?? "—"}
+                  </TableCell>
+                  <TableCell className="text-text-secondary">
+                    {u.designation ?? "—"}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className="capitalize">
-                      {roleName(u)}
-                    </Badge>
+                    <StatusBadge status={u.status} />
                   </TableCell>
                   <TableCell>
-                    {u.status === "ACTIVE" ? (
-                      <span className="text-success">Active</span>
-                    ) : (
-                      <span className="text-error">
-                        {u.status ? u.status.charAt(0) + u.status.slice(1).toLowerCase() : "Inactive"}
-                      </span>
-                    )}
+                    <div className="flex justify-end gap-1">
+                      {perms.update && (
+                        <Button variant="ghost" size="icon-sm" aria-label="Edit user" onClick={() => setDialog({ edit: u })}>
+                          <Pencil />
+                        </Button>
+                      )}
+                      {perms.delete && (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label="Delete user"
+                          className="text-muted-foreground hover:text-error"
+                          onClick={() => handleDelete(u)}
+                        >
+                          <Trash2 />
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
@@ -149,109 +172,112 @@ export default function UsersPage() {
         </Table>
       </div>
 
-      {pagination && pagination.totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <p className="text-xs text-text-tertiary">
-            Page {pagination.page} of {pagination.totalPages}
-          </p>
-          <div className="flex gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={!pagination.hasPrevious}
-              onClick={() => setPage(pagination.previous!)}
-            >
-              <ChevronLeft /> Previous
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={!pagination.hasNext}
-              onClick={() => setPage(pagination.next!)}
-            >
-              Next <ChevronRight />
-            </Button>
-          </div>
-        </div>
+      <PaginationBar
+        pagination={result?.pagination ?? null}
+        onPrev={() => setPage((p) => Math.max(1, p - 1))}
+        onNext={() => setPage((p) => p + 1)}
+      />
+
+      {dialog && (
+        <UserFormDialog
+          user={dialog === "create" ? null : (dialog as { edit: User }).edit}
+          onClose={() => setDialog(null)}
+          onSaved={() => {
+            setDialog(null);
+            load();
+          }}
+        />
       )}
     </div>
   );
 }
 
-function CreateUserDialog({
-  children,
-  onCreated,
+function UserFormDialog({
+  user,
+  onClose,
+  onSaved,
 }: {
-  children: React.ReactNode;
-  onCreated: () => void;
+  user: User | null;
+  onClose: () => void;
+  onSaved: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [roles, setRoles] = useState<Role[]>([]);
-  const [form, setForm] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    roleId: "",
-    designation: "",
-    phone: "",
-  });
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [form, setForm] = useState(() => ({
+    firstName: user?.firstName ?? "",
+    lastName: user?.lastName ?? "",
+    email: user?.email ?? "",
+    roleId:
+      user && typeof user.role !== "string" ? user.role.id : "",
+    departmentId: user?.departmentId ?? user?.department?.id ?? "",
+    designation: user?.designation ?? "",
+    phone: user?.phone ?? "",
+    status: (user?.status ?? "ACTIVE") as UserStatus,
+  }));
 
   useEffect(() => {
-    if (!open || roles.length > 0) return;
-    api
-      .listRoles()
-      .then((res) => {
-        setRoles(res.data);
-        if (!form.roleId && res.data[0]) {
-          setForm((f) => ({ ...f, roleId: res.data[0].id }));
-        }
+    let live = true;
+    Promise.all([api.listRoles(), api.listDepartments(1, 100)])
+      .then(([r, d]) => {
+        if (!live) return;
+        setRoles(r.data);
+        setDepartments(d.data);
+        setForm((f) => ({ ...f, roleId: f.roleId || (r.data[0]?.id ?? "") }));
       })
       .catch((err) =>
         toast.error(err instanceof Error ? err.message : "Failed to load roles")
       );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+    return () => {
+      live = false;
+    };
+  }, []);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setSaving(true);
     try {
-      const res = await api.createUser({
-        email: form.email,
-        firstName: form.firstName,
-        lastName: form.lastName,
-        roleId: form.roleId,
-        designation: form.designation || null,
-        phone: form.phone || null,
-      });
-      toast.success(`User created — ${res.data.email}`);
-      setOpen(false);
-      setForm({
-        firstName: "",
-        lastName: "",
-        email: "",
-        roleId: roles[0]?.id ?? "",
-        designation: "",
-        phone: "",
-      });
-      onCreated();
+      if (user) {
+        await api.updateUser(user.id, {
+          firstName: form.firstName,
+          lastName: form.lastName,
+          phone: form.phone || null,
+          designation: form.designation || null,
+          roleId: form.roleId || undefined,
+          departmentId: form.departmentId || null,
+          status: form.status,
+        });
+        toast.success("User updated");
+      } else {
+        await api.createUser({
+          email: form.email,
+          firstName: form.firstName,
+          lastName: form.lastName,
+          phone: form.phone || null,
+          designation: form.designation || null,
+          roleId: form.roleId,
+          departmentId: form.departmentId || null,
+          status: form.status,
+        });
+        toast.success("User created");
+      }
+      onSaved();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to create user");
+      toast.error(err instanceof Error ? err.message : "Failed to save user");
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{children}</DialogTrigger>
+    <Dialog open onOpenChange={onClose}>
       <DialogContent className="rounded-lg sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Create user</DialogTitle>
+          <DialogTitle>{user ? "Edit user" : "Create user"}</DialogTitle>
           <DialogDescription>
-            A default password will be set; the user can change it after first
-            login.
+            {user
+              ? "Update profile, role, and membership details."
+              : "A default password is set; the user changes it after first login."}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
@@ -262,9 +288,7 @@ function CreateUserDialog({
                 id="firstName"
                 required
                 value={form.firstName}
-                onChange={(e) =>
-                  setForm({ ...form, firstName: e.target.value })
-                }
+                onChange={(e) => setForm({ ...form, firstName: e.target.value })}
               />
             </div>
             <div className="space-y-2">
@@ -273,9 +297,7 @@ function CreateUserDialog({
                 id="lastName"
                 required
                 value={form.lastName}
-                onChange={(e) =>
-                  setForm({ ...form, lastName: e.target.value })
-                }
+                onChange={(e) => setForm({ ...form, lastName: e.target.value })}
               />
             </div>
           </div>
@@ -285,6 +307,7 @@ function CreateUserDialog({
               id="email"
               type="email"
               required
+              disabled={Boolean(user)}
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
             />
@@ -307,31 +330,105 @@ function CreateUserDialog({
               </select>
             </div>
             <div className="space-y-2">
+              <Label htmlFor="department">Department</Label>
+              <select
+                id="department"
+                className="h-10 w-full rounded-md border border-border-base bg-surface px-3 text-sm"
+                value={form.departmentId}
+                onChange={(e) => setForm({ ...form, departmentId: e.target.value })}
+              >
+                <option value="">None</option>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
               <Label htmlFor="designation">Designation</Label>
               <Input
                 id="designation"
                 value={form.designation}
-                onChange={(e) =>
-                  setForm({ ...form, designation: e.target.value })
-                }
+                onChange={(e) => setForm({ ...form, designation: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="phone">Phone</Label>
+              <Input
+                id="phone"
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
               />
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="phone">Phone</Label>
-            <Input
-              id="phone"
-              value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
-            />
+            <Label htmlFor="status">Status</Label>
+            <select
+              id="status"
+              className="h-10 w-full rounded-md border border-border-base bg-surface px-3 text-sm"
+              value={form.status}
+              onChange={(e) => setForm({ ...form, status: e.target.value as UserStatus })}
+            >
+              {USER_STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {s.charAt(0) + s.slice(1).toLowerCase()}
+                </option>
+              ))}
+            </select>
           </div>
           <DialogFooter>
             <Button type="submit" disabled={saving || !form.roleId}>
-              {saving ? "Creating…" : "Create user"}
+              {saving ? "Saving…" : user ? "Save changes" : "Create user"}
             </Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+const ROLE_STYLES: Record<string, string> = {
+  superadmin: "bg-brand-soft text-brand",
+  founder: "bg-brand-soft text-brand",
+  ceo: "bg-brand-soft text-brand",
+  cto: "bg-brand-soft text-brand",
+  coo: "bg-brand-soft text-brand",
+  cfo: "bg-brand-soft text-brand",
+  hr: "bg-warning-light text-warning",
+  manager: "bg-warning-light text-warning",
+  lead: "bg-info-light text-info",
+  associate: "bg-neutral-100 text-neutral-700",
+  member: "bg-neutral-100 text-neutral-700",
+};
+
+function roleBadgeClass(u: User): string {
+  const key =
+    typeof u.role === "string"
+      ? u.role.toLowerCase()
+      : u.role.name.toLowerCase();
+  return ROLE_STYLES[key] ?? "border-border bg-surface text-text-secondary";
+}
+
+const STATUS_STYLES: Record<string, { dot: string; label: string; text: string }> = {
+  ACTIVE: { dot: "bg-success", label: "Active", text: "text-success" },
+  INACTIVE: { dot: "bg-neutral-400", label: "Inactive", text: "text-text-secondary" },
+  SUSPENDED: { dot: "bg-error", label: "Suspended", text: "text-error" },
+};
+
+function StatusBadge({ status }: { status?: string }) {
+  const s =
+    STATUS_STYLES[status ?? ""] ?? {
+      dot: "bg-neutral-400",
+      label: status ? status.charAt(0) + status.slice(1).toLowerCase() : "Inactive",
+      text: "text-text-secondary",
+    };
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-sm ${s.text}`}>
+      <span className={`h-2 w-2 rounded-full ${s.dot}`} />
+      {s.label}
+    </span>
   );
 }

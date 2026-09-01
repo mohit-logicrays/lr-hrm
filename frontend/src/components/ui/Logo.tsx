@@ -13,7 +13,7 @@ export default function Logo() {
           className="h-9 w-9 object-contain"
         />
       </span>
-      <span className="text-lg font-bold tracking-tight text-text-primary">
+      <span className="text-lg font-bold tracking-tight text-sidebar-foreground">
         Logic Rays
       </span>
     </Link>
