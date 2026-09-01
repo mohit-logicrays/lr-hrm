@@ -15,6 +15,7 @@ import {
 import { useAuth, usePermission } from "@/providers/auth-provider";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import Image from "next/image";
 import {
   CalendarDays,
   CalendarOff,
@@ -134,8 +135,15 @@ export function AppSidebar() {
       {/* Header */}
       <SidebarHeader className="p-4 border-b border-sidebar-border/40">
         <Link href="/" className="flex items-center gap-3 group">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand text-white font-bold shadow-md group-hover:scale-105 transition-transform duration-200">
-            <span className="text-base font-extrabold tracking-tight">LR</span>
+          <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10 p-1.5 shadow-sm group-hover:scale-105 transition-transform duration-200 border border-sidebar-border/50">
+            <Image
+              src="/lr_icon.png"
+              alt="Logic Rays Logo"
+              width={32}
+              height={32}
+              className="h-full w-full object-contain"
+              priority
+            />
           </div>
           <div className="flex flex-col overflow-hidden">
             <span className="font-heading text-base font-bold text-sidebar-foreground tracking-tight leading-snug truncate">
