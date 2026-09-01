@@ -13,6 +13,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import Logo from "@/components/ui/Logo";
+import { AuroraBackground } from "@/components/ui/aurora-background";
 import { useAuth, usePermission } from "@/providers/auth-provider";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -42,32 +43,36 @@ export function AppSidebar() {
 
   return (
     <Sidebar>
-      <SidebarHeader className="p-4">
-        <Logo />
-      </SidebarHeader>
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Modules</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {NAV_ITEMS.map((item) => (
-                <NavButton
-                  key={item.href}
-                  item={item}
-                  active={pathname === item.href}
-                  role={user?.role}
-                />
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      </SidebarContent>
-      <SidebarFooter>
-        <div className="px-4 py-3 text-xs text-text-tertiary">
-          Signed in as{" "}
-          <span className="font-medium text-text-secondary">{user?.role}</span>
-        </div>
-      </SidebarFooter>
+      <AuroraBackground className="h-full">
+        <SidebarHeader className="relative z-10 p-4">
+          <Logo />
+        </SidebarHeader>
+        <SidebarContent className="relative z-10">
+          <SidebarGroup>
+            <SidebarGroupLabel>Modules</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {NAV_ITEMS.map((item) => (
+                  <NavButton
+                    key={item.href}
+                    item={item}
+                    active={pathname === item.href}
+                    role={user?.role}
+                  />
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SidebarContent>
+        <SidebarFooter className="relative z-10">
+          <div className="px-4 py-3 text-xs text-text-tertiary">
+            Signed in as{" "}
+            <span className="font-medium text-text-secondary">
+              {user?.role}
+            </span>
+          </div>
+        </SidebarFooter>
+      </AuroraBackground>
     </Sidebar>
   );
 }
