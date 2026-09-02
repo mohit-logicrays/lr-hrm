@@ -23,6 +23,7 @@ import requestRoutes from "./modules/requests/request.routes";
 import announcementRoutes from "./modules/announcements/announcement.routes";
 import policyRoutes from "./modules/policies/policy.routes";
 import supportRoutes from "./modules/support/support.routes";
+import profileRoutes from "./modules/profile/profile.routes";
 
 import uploadRoutes from "./modules/upload/upload.routes";
 import path from "path";
@@ -56,6 +57,7 @@ app.get("/api/health", (_req, res) => {
 
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/users", userRoutes);
+app.use("/api/v1/profile", profileRoutes);
 app.use("/api/v1/upload", uploadRoutes);
 app.use("/api/v1/roles", roleRoutes);
 app.use("/api/v1/departments", departmentRoutes);

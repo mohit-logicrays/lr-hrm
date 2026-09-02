@@ -20,10 +20,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import Link from "next/link";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import {
   Search,
   Bell,
-  Settings,
   LogOut,
   User as UserIcon,
   X,
@@ -158,14 +158,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Quick Settings */}
-            <Link
-              href="/profile"
-              className="p-2 rounded-full hover:bg-surface-subtle text-text-secondary hover:text-brand transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-              aria-label="Settings"
-            >
-              <Settings className="h-5 w-5" />
-            </Link>
+            {/* Theme Toggle (Dark / Light) */}
+            <ThemeToggle />
 
             {/* Profile Dropdown */}
             <DropdownMenu>
@@ -194,12 +188,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <Link href="/profile" className="flex items-center gap-2 text-sm font-medium">
                     <UserIcon className="h-4 w-4 text-text-tertiary" />
                     <span>My Profile</span>
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild className="cursor-pointer rounded-lg px-2 py-2">
-                  <Link href="/profile" className="flex items-center gap-2 text-sm font-medium">
-                    <Settings className="h-4 w-4 text-text-tertiary" />
-                    <span>Account Settings</span>
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator className="my-1" />

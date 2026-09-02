@@ -851,6 +851,61 @@ export const api = {
   deleteUser: (id: string) =>
     request<void>(`/api/v1/users/${id}`, { method: "DELETE" }),
 
+  // ---- Profile ----
+  getProfile: () =>
+    request<ItemResponse<User>>("/api/v1/profile"),
+
+  updateProfileBasic: (payload: {
+    firstName: string;
+    lastName: string;
+    personalEmail?: string;
+    mobile?: string;
+    alternateMobile?: string;
+    gender?: string;
+    dateOfBirth?: string;
+    linkedinUrl?: string;
+    portfolioUrl?: string;
+  }) =>
+    request<ItemResponse<User>>("/api/v1/profile/basic", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  updateProfileAddress: (payload: {
+    currentAddress?: Record<string, unknown>;
+    permanentAddress?: Record<string, unknown>;
+    sameAsCurrentAddress?: boolean;
+  }) =>
+    request<ItemResponse<User>>("/api/v1/profile/address", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  updateProfileEmergency: (payload: {
+    emergencyContactName: string;
+    emergencyContactRelation: string;
+    emergencyContactPhone: string;
+  }) =>
+    request<ItemResponse<User>>("/api/v1/profile/emergency", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  updateProfilePicture: (avatarUrl: string) =>
+    request<ItemResponse<User>>("/api/v1/profile/picture", {
+      method: "PUT",
+      body: JSON.stringify({ avatarUrl }),
+    }),
+
+  changeProfilePassword: (payload: {
+    currentPassword: string;
+    newPassword: string;
+  }) =>
+    request<ItemResponse<{ message: string }>>("/api/v1/profile/password", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
   updateProfile: (payload: Partial<User>) =>
     request<ItemResponse<User>>("/api/v1/users/me/profile", {
       method: "PUT",

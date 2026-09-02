@@ -189,6 +189,7 @@
 }
 
 /* Dark theme — designed independently, not inverted */
+.dark,
 [data-theme="dark"] {
   color-scheme: dark;
 

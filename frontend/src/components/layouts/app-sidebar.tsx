@@ -89,7 +89,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Support", href: "/support", icon: LifeBuoy },
       { label: "Requests", href: "/requests", icon: ListChecks, resource: "request" },
-      { label: "Settings", href: "/profile", icon: Settings },
+      { label: "My Profile", href: "/profile", icon: UserIcon },
     ],
   },
 ];
@@ -206,12 +206,6 @@ export function AppSidebar() {
               <Link href="/profile" className="flex items-center gap-2 text-sm font-medium">
                 <UserIcon className="h-4 w-4 text-muted-foreground" />
                 <span>My Profile</span>
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild className="cursor-pointer rounded-lg px-2 py-2">
-              <Link href="/profile" className="flex items-center gap-2 text-sm font-medium">
-                <Settings className="h-4 w-4 text-muted-foreground" />
-                <span>Settings</span>
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator className="my-1" />
