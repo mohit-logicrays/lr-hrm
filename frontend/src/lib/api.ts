@@ -366,11 +366,59 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
+  createFullUser: (payload: any) =>
+    request<ItemResponse<User>>("/api/v1/users/full", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  saveUserDraft: (payload: { draftId?: string; officialEmail?: string; currentStep: number; stepData: any }) =>
+    request<ItemResponse<{ id: string; currentStep: number; stepData: any }>>("/api/v1/users/draft", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  getUserDraft: (draftId: string) =>
+    request<ItemResponse<{ id: string; officialEmail: string; currentStep: number; stepData: any }>>(
+      `/api/v1/users/draft/${draftId}`
+    ),
+
+  deleteUserDraft: (draftId: string) =>
+    request<void>(`/api/v1/users/draft/${draftId}`, { method: "DELETE" }),
+
+  uploadFile: async (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`${API_BASE}/api/v1/upload`, {
+      method: "POST",
+      body: formData,
+      credentials: "include",
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new ApiError(res.status, body?.message || "File upload failed");
+    }
+    return res.json() as Promise<ItemResponse<{ url: string; filename: string }>>;
+  },
+
+  updateUserStatus: (id: string, status: "ACTIVE" | "INACTIVE" | "SUSPENDED") =>
+    request<ItemResponse<User>>(`/api/v1/users/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
+
+  resetUserPassword: (id: string, newPassword?: string) =>
+    request<ItemResponse<{ temporaryPassword: string }>>(`/api/v1/users/${id}/reset-password`, {
+      method: "POST",
+      body: JSON.stringify({ newPassword }),
+    }),
+
   updateUser: (id: string, payload: UpdateUserPayload) =>
     request<ItemResponse<User>>(`/api/v1/users/${id}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
     }),
+
 
   deleteUser: (id: string) =>
     request<void>(`/api/v1/users/${id}`, { method: "DELETE" }),

@@ -21,6 +21,9 @@ import leaveRoutes from "./modules/leave/leave.routes";
 import holidayRoutes from "./modules/holidays/holiday.routes";
 import requestRoutes from "./modules/requests/request.routes";
 
+import uploadRoutes from "./modules/upload/upload.routes";
+import path from "path";
+
 const app = express();
 
 app.use(
@@ -29,9 +32,10 @@ app.use(
     credentials: true,
   })
 );
-app.use(helmet());
-app.use(express.json({ limit: "2mb" }));
+app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
+app.use(express.json({ limit: "5mb" }));
 app.use(cookieParser());
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 // Request logging (sanitized, async)
 app.use(requestLogger);
@@ -57,6 +61,7 @@ app.get("/api/health", (_req, res) => {
 
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/users", userRoutes);
+app.use("/api/v1/upload", uploadRoutes);
 app.use("/api/v1/roles", roleRoutes);
 app.use("/api/v1/departments", departmentRoutes);
 app.use("/api/v1/teams", teamRoutes);

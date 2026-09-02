@@ -131,40 +131,156 @@ model TeamMember {
 
 // ---------- Users ----------
 model User {
-  id               String      @id @default(cuid())
-  email            String
-  password         String
-  firstName        String
-  lastName         String
-  phone            String?
-  designation      String?
-  roleId           String
-  departmentId     String?
-  status           UserStatus  @default(ACTIVE)
-  isSpecialRole    Boolean     @default(false)
-  specialRoleName  String?
-  mustChangePassword Boolean   @default(false)
-  lastLoginAt      DateTime?
-  lastLoginIp      String?
-  createdBy        String?
-  deletedAt        DateTime?
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
+  id                 String      @id @default(cuid())
+  email              String
+  employeeId         String?     @unique
+  personalEmail      String?
+  mobile             String?
+  alternateMobile    String?
+  gender             String?
+  avatarUrl          String?
+  password           String
+  firstName          String
+  lastName           String
+  phone              String?
+  designation        String?
+  roleId             String
+  departmentId       String?
+  status             UserStatus  @default(ACTIVE)
+  isSpecialRole      Boolean     @default(false)
+  specialRoleName    String?
+  mustChangePassword Boolean     @default(false)
+  lastLoginAt        DateTime?
+  lastLoginIp        String?
+  createdBy          String?
+  deletedAt          DateTime?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
 
-  role          Role           @relation(fields: [roleId], references: [id])
-  department    Department?    @relation(fields: [departmentId], references: [id])
-  teamMembers   TeamMember[]
-  projectMembers ProjectMember[]
-  timeLogs      TimeLog[]
-  leaveBalances LeaveBalance[]
-  leaveRequests LeaveRequest[]
-  refreshTokens RefreshToken[]
+  role                Role                   @relation(fields: [roleId], references: [id])
+  department          Department?            @relation(fields: [departmentId], references: [id])
+  profile             UserProfile?
+  currentEmployment   UserCurrentEmployment?
+  importantDates      UserImportantDates?
+  previousEmployments UserPreviousEmployment[]
+  teamMembers         TeamMember[]
+  projectMembers      ProjectMember[]
+  timeLogs            TimeLog[]
+  leaveBalances       LeaveBalance[]
+  leaveRequests       LeaveRequest[]
+  refreshTokens       RefreshToken[]
 
   @@index([roleId])
   @@index([departmentId])
+  @@index([employeeId])
   @@index([status])
   @@index([deletedAt])
 }
+
+// ---------- User Profile Details ----------
+model UserProfile {
+  id                       String    @id @default(cuid())
+  userId                   String    @unique
+  dateOfBirth              DateTime?
+  bloodGroup               String?
+  maritalStatus            String?
+  nationality              String?
+  aadhaarNumber            String?
+  panNumber                String?
+  currentAddress           Json?
+  permanentAddress         Json?
+  sameAsCurrentAddress     Boolean   @default(false)
+  emergencyContactName     String?
+  emergencyContactRelation String?
+  emergencyContactPhone    String?
+  linkedinUrl              String?
+  portfolioUrl             String?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ---------- User Current Employment ----------
+model UserCurrentEmployment {
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  designation           String
+  employmentType        String
+  workMode              String   @default("Office")
+  workLocation          String?
+  ctc                   Float
+  probationPeriodMonths Int      @default(3)
+  noticePeriodDays      Int      @default(30)
+  shiftTiming           String?
+  skills                Json?
+  about                 String?
+  reportingManagerId    String?
+  projectManagerId      String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ---------- User Previous Employment ----------
+model UserPreviousEmployment {
+  id                  String    @id @default(cuid())
+  userId              String
+  companyName         String
+  designation         String?
+  employmentType      String?
+  startDate           DateTime?
+  endDate             DateTime?
+  lastDrawnSalary     Float?
+  reasonForLeaving    String?
+  hrContactName       String?
+  hrContactPhone      String?
+  hrContactEmail      String?
+  experienceLetterUrl String?
+  relievingLetterUrl  String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ---------- User Important Dates ----------
+model UserImportantDates {
+  id                String    @id @default(cuid())
+  userId            String    @unique
+  interviewDate     DateTime?
+  offerDate         DateTime?
+  joiningDate       DateTime
+  probationEndDate  DateTime?
+  confirmationDate  DateTime?
+  resignDate        DateTime?
+  lastWorkingDay    DateTime?
+  fullAndFinalDate  DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ---------- User Draft (Wizard Auto-Save) ----------
+model UserDraft {
+  id            String    @id @default(cuid())
+  officialEmail String?
+  currentStep   Int       @default(1)
+  stepData      Json
+  createdBy     String?
+  expiresAt     DateTime
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([officialEmail])
+  @@index([createdBy])
+  @@index([expiresAt])
+}
+
 
 // ---------- Refresh Tokens ----------
 model RefreshToken {
