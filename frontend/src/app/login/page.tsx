@@ -68,27 +68,6 @@ export default function LoginPage() {
           </p>
 
           <form onSubmit={onSubmit} className="mt-8 space-y-6" noValidate>
-            {/* Quick Demo Credentials Info Banner */}
-            <div className="rounded-lg border border-brand/20 bg-brand/5 p-3 text-xs space-y-1.5">
-              <div className="flex items-center justify-between font-semibold text-brand">
-                <span>Default Super Admin Credentials:</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmail("admin@logicrays.com");
-                    setPassword("LogicRays@2026");
-                  }}
-                  className="text-[11px] underline hover:text-brand-hover cursor-pointer"
-                >
-                  Auto-fill
-                </button>
-              </div>
-              <p className="text-text-secondary font-mono text-[11px]">
-                Email: <strong className="text-text-primary">admin@logicrays.com</strong>
-                <br />
-                Password: <strong className="text-text-primary">LogicRays@2026</strong>
-              </p>
-            </div>
 
             {error && (
               <div

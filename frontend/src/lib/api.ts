@@ -734,6 +734,11 @@ async function fetchWithRetry(path: string, init?: RequestInit, retried = false)
     const refreshed = await refreshToken();
     if (refreshed) {
       return fetchWithRetry(path, init, true);
+    } else {
+      // If refresh also fails (e.g. database reset or expired refresh token), redirect to login
+      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+        window.location.href = "/login";
+      }
     }
   }
 
