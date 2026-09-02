@@ -107,6 +107,7 @@ export const projectQuerySchema = z.object({
   departmentId: z.string().optional(),
   primaryTeamId: z.string().optional(),
   projectManagerId: z.string().optional(),
+  memberOnly: z.coerce.boolean().optional(),
 });
 
 export const addMemberSchema = z.object({

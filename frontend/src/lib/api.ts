@@ -374,31 +374,79 @@ export interface ProjectDetail extends Project {
 
 // ---------- Time ----------
 
-export type TimeLogStatus = "PENDING" | "APPROVED" | "REJECTED";
+export type TimeLogStatus = "DRAFT" | "SUBMITTED" | "PENDING" | "APPROVED" | "REJECTED";
 
 export interface TimeLog {
   id: string;
   userId: string;
   projectId?: string | null;
+  taskId?: string | null;
   date: string;
-  startTime: string;
-  endTime: string;
+  startTime?: string | null;
+  endTime?: string | null;
+  hours: number;
   durationMin: number;
+  isBillable: boolean;
+  isOvertime: boolean;
   description?: string | null;
+  rejectionReason?: string | null;
   status: TimeLogStatus;
   approvedBy?: string | null;
   approvedAt?: string | null;
   createdAt?: string;
-  user?: { id: string; firstName: string; lastName: string; email: string };
+  updatedAt?: string;
+  user?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    department?: { id: string; name: string } | null;
+  };
   project?: { id: string; name: string; code: string | null } | null;
+  task?: { id: string; title: string } | null;
 }
 
 export interface CreateTimeLogPayload {
   projectId?: string | null;
+  taskId?: string | null;
   date: string;
-  startTime: string;
-  endTime: string;
+  startTime?: string | null;
+  endTime?: string | null;
+  hours: number;
+  isBillable?: boolean;
+  isOvertime?: boolean;
   description?: string | null;
+  status?: "DRAFT" | "SUBMITTED";
+}
+
+export interface TimesheetSummary {
+  totalHours: number;
+  billableHours: number;
+  pendingHours: number;
+  overtimeHours: number;
+  totalEntries: number;
+}
+
+export interface TimesheetReports {
+  hoursPerProject: Array<{
+    id: string;
+    name: string;
+    code: string;
+    totalHours: number;
+  }>;
+  billableRatio: {
+    billableHours: number;
+    nonBillableHours: number;
+    billablePercentage: number;
+  };
+  employeeUtilization: Array<{
+    id: string;
+    name: string;
+    department: string;
+    totalHours: number;
+    billableHours: number;
+    utilizationRate: number;
+  }>;
 }
 
 // ---------- Leave ----------
@@ -842,7 +890,8 @@ export const api = {
     priority?: ProjectPriority,
     departmentId?: string,
     primaryTeamId?: string,
-    projectManagerId?: string
+    projectManagerId?: string,
+    memberOnly?: boolean
   ) =>
     request<ListResponse<Project>>(
       `/api/v1/projects${qs({
@@ -854,6 +903,7 @@ export const api = {
         departmentId,
         primaryTeamId,
         projectManagerId,
+        memberOnly: memberOnly ? "true" : undefined,
       })}`
     ),
 
@@ -986,17 +1036,20 @@ export const api = {
     ),
 
   // ---- Time ----
-  listMyTimeLogs: (page = 1, pageSize = 10) =>
-    request<ListResponse<TimeLog>>(`/api/v1/time/my${qs({ page, pageSize })}`),
+  listMyTimeLogs: (page = 1, pageSize = 20, opts: { from?: string; to?: string; status?: string } = {}) =>
+    request<ListResponse<TimeLog>>(`/api/v1/time/my${qs({ page, pageSize, ...opts })}`),
 
   listTimeLogs: (
     page = 1,
-    pageSize = 10,
-    opts: { userId?: string; projectId?: string; status?: TimeLogStatus } = {}
+    pageSize = 20,
+    opts: { userId?: string; projectId?: string; taskId?: string; status?: string; from?: string; to?: string } = {}
   ) =>
     request<ListResponse<TimeLog>>(
       `/api/v1/time${qs({ page, pageSize, ...opts })}`
     ),
+
+  getMyTimesheetSummary: (from?: string, to?: string) =>
+    request<ItemResponse<TimesheetSummary>>(`/api/v1/time/summary${qs({ from, to })}`),
 
   createTimeLog: (payload: CreateTimeLogPayload) =>
     request<ItemResponse<TimeLog>>("/api/v1/time", {
@@ -1004,17 +1057,32 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
-  updateTimeLog: (id: string, payload: Partial<CreateTimeLogPayload>) =>
+  updateTimeLog: (id: string, payload: Partial<CreateTimeLogPayload> & { status?: TimeLogStatus; rejectionReason?: string | null }) =>
     request<ItemResponse<TimeLog>>(`/api/v1/time/${id}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
     }),
 
-  approveTimeLog: (id: string, status: "APPROVED" | "REJECTED") =>
+  submitWeekTimesheet: (from?: string, to?: string) =>
+    request<{ submittedCount: number }>("/api/v1/time/submit-week", {
+      method: "POST",
+      body: JSON.stringify({ from, to }),
+    }),
+
+  approveTimeLog: (id: string, status: "APPROVED" | "REJECTED", rejectionReason?: string | null) =>
     request<ItemResponse<TimeLog>>(`/api/v1/time/${id}/approve`, {
       method: "POST",
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, rejectionReason }),
     }),
+
+  bulkApproveTimeLogs: (ids: string[], status: "APPROVED" | "REJECTED", rejectionReason?: string | null) =>
+    request<{ updatedCount: number; status: string }>("/api/v1/time/bulk-approve", {
+      method: "POST",
+      body: JSON.stringify({ ids, status, rejectionReason }),
+    }),
+
+  getTimesheetReports: (from?: string, to?: string) =>
+    request<ItemResponse<TimesheetReports>>(`/api/v1/time/reports${qs({ from, to })}`),
 
   deleteTimeLog: (id: string) =>
     request<void>(`/api/v1/time/${id}`, { method: "DELETE" }),

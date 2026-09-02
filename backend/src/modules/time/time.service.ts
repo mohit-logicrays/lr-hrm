@@ -10,40 +10,55 @@ const timeLogSelect = {
   id: true,
   userId: true,
   projectId: true,
+  taskId: true,
   date: true,
   startTime: true,
   endTime: true,
+  hours: true,
   durationMin: true,
+  isBillable: true,
+  isOvertime: true,
   description: true,
+  rejectionReason: true,
   status: true,
   approvedBy: true,
   approvedAt: true,
   createdAt: true,
-  user: { select: { id: true, firstName: true, lastName: true, email: true } },
+  updatedAt: true,
+  user: {
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      department: { select: { id: true, name: true } },
+    },
+  },
   project: { select: { id: true, name: true, code: true } },
+  task: { select: { id: true, title: true } },
 } satisfies Prisma.TimeLogSelect;
 
 export class TimeService {
-  private duration(startTime: Date, endTime: Date): number {
-    return Math.round((endTime.getTime() - startTime.getTime()) / 60000);
-  }
-
   async list(params: {
     page?: number;
     limit?: number;
     userId?: string;
     projectId?: string;
+    taskId?: string;
     status?: string;
     from?: string;
     to?: string;
   }) {
     const page = params.page ?? 1;
-    const limit = params.limit ?? 10;
+    const limit = params.limit ?? 20;
 
     const where: Prisma.TimeLogWhereInput = {
       ...(params.userId ? { userId: params.userId } : {}),
       ...(params.projectId ? { projectId: params.projectId } : {}),
-      ...(params.status ? { status: params.status as never } : {}),
+      ...(params.taskId ? { taskId: params.taskId } : {}),
+      ...(params.status && params.status !== "ALL"
+        ? { status: params.status as never }
+        : {}),
       ...(params.from || params.to
         ? {
             date: {
@@ -78,57 +93,91 @@ export class TimeService {
     };
   }
 
-  async myLogs(userId: string, params: { page?: number; limit?: number; from?: string; to?: string }) {
+  async myLogs(userId: string, params: { page?: number; limit?: number; from?: string; to?: string; status?: string }) {
     return this.list({ ...params, userId });
+  }
+
+  async mySummary(userId: string, from?: string, to?: string) {
+    const where: Prisma.TimeLogWhereInput = {
+      userId,
+      ...(from || to
+        ? {
+            date: {
+              ...(from ? { gte: new Date(from) } : {}),
+              ...(to ? { lte: new Date(to) } : {}),
+            },
+          }
+        : {}),
+    };
+
+    const logs = await prisma.timeLog.findMany({
+      where,
+      select: {
+        hours: true,
+        isBillable: true,
+        isOvertime: true,
+        status: true,
+      },
+    });
+
+    let totalHours = 0;
+    let billableHours = 0;
+    let pendingHours = 0;
+    let overtimeHours = 0;
+
+    for (const log of logs) {
+      const h = log.hours || 0;
+      totalHours += h;
+      if (log.isBillable) billableHours += h;
+      if (log.status === "SUBMITTED" || log.status === "PENDING") pendingHours += h;
+      if (log.isOvertime) overtimeHours += h;
+    }
+
+    return {
+      totalHours: Number(totalHours.toFixed(1)),
+      billableHours: Number(billableHours.toFixed(1)),
+      pendingHours: Number(pendingHours.toFixed(1)),
+      overtimeHours: Number(overtimeHours.toFixed(1)),
+      totalEntries: logs.length,
+    };
   }
 
   async getById(id: string) {
     const log = await prisma.timeLog.findUnique({ where: { id }, select: timeLogSelect });
-    if (!log) throw new AppError(404, "Time log not found");
+    if (!log) throw new AppError(404, "Time log entry not found");
     return log;
   }
 
   async create(userId: string, data: CreateTimeLogInput) {
     if (data.projectId) {
       const project = await prisma.project.findUnique({ where: { id: data.projectId } });
-      if (!project) throw new AppError(404, "Project not found");
+      if (!project) throw new AppError(404, "Selected project not found");
     }
 
-    const startTime = new Date(data.startTime);
-    const endTime = new Date(data.endTime);
-
-    // Overlap prevention: no two time logs for this user may overlap
-    const overlapping = await prisma.timeLog.findFirst({
-      where: {
-        userId,
-        AND: [
-          { startTime: { lt: endTime } },
-          { endTime: { gt: startTime } },
-        ],
-      },
-      select: { id: true, startTime: true, endTime: true },
-    });
-
-    if (overlapping) {
-      throw new AppError(
-        409,
-        "Time log overlaps with an existing entry",
-        { conflictingId: overlapping.id }
-      );
+    if (data.taskId) {
+      const task = await prisma.task.findUnique({ where: { id: data.taskId } });
+      if (!task) throw new AppError(404, "Selected task not found");
     }
 
-    const durationMin = this.duration(startTime, endTime);
+    const logDate = new Date(data.date);
+
+    // Business rule: Overtime auto-calculated if hours > 8
+    const isOvertime = data.isOvertime || data.hours > 8;
 
     return prisma.timeLog.create({
       data: {
         userId,
         projectId: data.projectId ?? null,
-        date: new Date(data.date || data.startTime),
-        startTime,
-        endTime,
-        durationMin,
+        taskId: data.taskId ?? null,
+        date: logDate,
+        startTime: data.startTime ? new Date(data.startTime) : null,
+        endTime: data.endTime ? new Date(data.endTime) : null,
+        hours: data.hours,
+        durationMin: Math.round(data.hours * 60),
+        isBillable: data.isBillable,
+        isOvertime,
         description: data.description ?? null,
-        status: "PENDING",
+        status: (data.status as any) || "DRAFT",
       },
       select: timeLogSelect,
     });
@@ -136,73 +185,211 @@ export class TimeService {
 
   async update(id: string, user: { id: string; roleName: string }, data: UpdateTimeLogInput) {
     const existing = await prisma.timeLog.findUnique({ where: { id } });
-    if (!existing) throw new AppError(404, "Time log not found");
+    if (!existing) throw new AppError(404, "Time log entry not found");
 
-    const canEditOthers = user.roleName === "superadmin" || user.roleName === "hr" || user.roleName === "manager";
-    if (existing.userId !== user.id && !canEditOthers) {
-      throw new AppError(403, "You cannot edit another user's time log");
+    const roleUpper = (user.roleName || "").toUpperCase();
+    const canManageOthers = ["SUPERADMIN", "HR_ADMIN", "ADMIN", "MANAGER", "TEAM_LEAD"].includes(roleUpper);
+
+    if (existing.userId !== user.id && !canManageOthers) {
+      throw new AppError(403, "You cannot edit another employee's time log");
     }
 
-    let startTime = existing.startTime;
-    let endTime = existing.endTime;
-    if (data.startTime || data.endTime) {
-      startTime = data.startTime ? new Date(data.startTime) : existing.startTime;
-      endTime = data.endTime ? new Date(data.endTime) : existing.endTime;
+    // Business rule: Regular employees can only edit DRAFT or REJECTED logs
+    if (!canManageOthers && existing.status !== "DRAFT" && existing.status !== "REJECTED") {
+      throw new AppError(400, "Only Draft or Rejected timesheets can be edited");
     }
 
-    if (data.status && existing.status === "APPROVED") {
-      throw new AppError(400, "Cannot change an already-approved time log");
-    }
-
-    const durationMin = this.duration(startTime, endTime);
+    const hours = data.hours ?? existing.hours;
+    const isOvertime = data.isOvertime ?? (hours > 8 || existing.isOvertime);
 
     return prisma.timeLog.update({
       where: { id },
       data: {
         projectId: data.projectId,
+        taskId: data.taskId,
         date: data.date ? new Date(data.date) : existing.date,
-        startTime,
-        endTime,
-        durationMin,
-        description: data.description,
-        status: data.status ?? existing.status,
+        startTime: data.startTime ? new Date(data.startTime) : existing.startTime,
+        endTime: data.endTime ? new Date(data.endTime) : existing.endTime,
+        hours,
+        durationMin: Math.round(hours * 60),
+        isBillable: data.isBillable ?? existing.isBillable,
+        isOvertime,
+        description: data.description ?? existing.description,
+        rejectionReason: data.rejectionReason ?? existing.rejectionReason,
+        status: (data.status as any) ?? existing.status,
       },
       select: timeLogSelect,
     });
   }
 
-  async approve(
-    id: string,
-    approvedBy: string,
-    status: "APPROVED" | "REJECTED"
-  ) {
-    const existing = await prisma.timeLog.findUnique({ where: { id } });
-    if (!existing) throw new AppError(404, "Time log not found");
-    if (existing.status !== "PENDING") {
-      throw new AppError(400, `Time log already ${existing.status.toLowerCase()}`);
+  async submitWeek(userId: string, from?: string, to?: string) {
+    const where: Prisma.TimeLogWhereInput = {
+      userId,
+      status: { in: ["DRAFT", "REJECTED"] as any },
+      ...(from || to
+        ? {
+            date: {
+              ...(from ? { gte: new Date(from) } : {}),
+              ...(to ? { lte: new Date(to) } : {}),
+            },
+          }
+        : {}),
+    };
+
+    const count = await prisma.timeLog.count({ where });
+    if (count === 0) {
+      throw new AppError(400, "No draft or rejected time logs found to submit for this week");
     }
+
+    await prisma.timeLog.updateMany({
+      where,
+      data: { status: "SUBMITTED" as any },
+    });
+
+    return { submittedCount: count };
+  }
+
+  async approve(id: string, approvedBy: string, status: "APPROVED" | "REJECTED", rejectionReason?: string | null) {
+    const existing = await prisma.timeLog.findUnique({ where: { id } });
+    if (!existing) throw new AppError(404, "Time log entry not found");
 
     return prisma.timeLog.update({
       where: { id },
-      data: { status, approvedBy, approvedAt: new Date() },
+      data: {
+        status: status as any,
+        rejectionReason: status === "REJECTED" ? rejectionReason ?? null : null,
+        approvedBy,
+        approvedAt: new Date(),
+      },
       select: timeLogSelect,
     });
   }
 
-  async remove(id: string, user: { id: string; permissions: string[] }) {
-    const existing = await prisma.timeLog.findUnique({ where: { id } });
-    if (!existing) throw new AppError(404, "Time log not found");
+  async bulkApprove(approvedBy: string, ids: string[], status: "APPROVED" | "REJECTED", rejectionReason?: string | null) {
+    await prisma.timeLog.updateMany({
+      where: { id: { in: ids } },
+      data: {
+        status: status as any,
+        rejectionReason: status === "REJECTED" ? rejectionReason ?? null : null,
+        approvedBy,
+        approvedAt: new Date(),
+      },
+    });
 
-    const canManage = user.permissions.includes("time:manage");
-    if (existing.userId !== user.id && !canManage) {
-      throw new AppError(403, "You cannot delete another user's time log");
+    return { updatedCount: ids.length, status };
+  }
+
+  async remove(id: string, user: { id: string; roleName: string }) {
+    const existing = await prisma.timeLog.findUnique({ where: { id } });
+    if (!existing) throw new AppError(404, "Time log entry not found");
+
+    const roleUpper = (user.roleName || "").toUpperCase();
+    const canManageOthers = ["SUPERADMIN", "HR_ADMIN", "ADMIN"].includes(roleUpper);
+
+    if (existing.userId !== user.id && !canManageOthers) {
+      throw new AppError(403, "You cannot delete another employee's time log");
     }
 
-    if (existing.status === "APPROVED" && !canManage) {
+    if (existing.status === "APPROVED" && !canManageOthers) {
       throw new AppError(400, "Approved time logs cannot be deleted");
     }
 
     await prisma.timeLog.delete({ where: { id } });
+  }
+
+  async getReports(from?: string, to?: string) {
+    const where: Prisma.TimeLogWhereInput = {
+      ...(from || to
+        ? {
+            date: {
+              ...(from ? { gte: new Date(from) } : {}),
+              ...(to ? { lte: new Date(to) } : {}),
+            },
+          }
+        : {}),
+    };
+
+    const logs = await prisma.timeLog.findMany({
+      where,
+      include: {
+        project: { select: { id: true, name: true, code: true } },
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            department: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+
+    // 1. Hours per Project
+    const projectMap: Record<string, { id: string; name: string; code: string; totalHours: number }> = {};
+    let totalBillable = 0;
+    let totalNonBillable = 0;
+
+    // 2. Employee Utilization Breakdown
+    const userMap: Record<string, { id: string; name: string; department: string; totalHours: number; billableHours: number }> = {};
+
+    for (const l of logs) {
+      const h = l.hours || 0;
+      const projName = l.project ? l.project.name : "Unassigned";
+      const projKey = l.project ? l.project.id : "unassigned";
+
+      if (!projectMap[projKey]) {
+        projectMap[projKey] = {
+          id: projKey,
+          name: projName,
+          code: l.project?.code || "MISC",
+          totalHours: 0,
+        };
+      }
+      projectMap[projKey].totalHours += h;
+
+      if (l.isBillable) totalBillable += h;
+      else totalNonBillable += h;
+
+      const userName = `${l.user.firstName || ""} ${l.user.lastName || ""}`.trim() || l.user.email;
+      const deptName = l.user.department ? l.user.department.name : "General";
+
+      if (!userMap[l.userId]) {
+        userMap[l.userId] = {
+          id: l.userId,
+          name: userName,
+          department: deptName,
+          totalHours: 0,
+          billableHours: 0,
+        };
+      }
+      userMap[l.userId].totalHours += h;
+      if (l.isBillable) userMap[l.userId].billableHours += h;
+    }
+
+    const hoursPerProject = Object.values(projectMap).map((p) => ({
+      ...p,
+      totalHours: Number(p.totalHours.toFixed(1)),
+    }));
+
+    const employeeUtilization = Object.values(userMap).map((u) => ({
+      ...u,
+      totalHours: Number(u.totalHours.toFixed(1)),
+      billableHours: Number(u.billableHours.toFixed(1)),
+      utilizationRate: u.totalHours > 0 ? Number(((u.billableHours / u.totalHours) * 100).toFixed(1)) : 0,
+    }));
+
+    return {
+      hoursPerProject,
+      billableRatio: {
+        billableHours: Number(totalBillable.toFixed(1)),
+        nonBillableHours: Number(totalNonBillable.toFixed(1)),
+        billablePercentage: totalBillable + totalNonBillable > 0
+          ? Number(((totalBillable / (totalBillable + totalNonBillable)) * 100).toFixed(1))
+          : 0,
+      },
+      employeeUtilization,
+    };
   }
 }
 

@@ -82,6 +82,15 @@ export class ProjectService {
       ...(params.departmentId ? { departmentId: params.departmentId } : {}),
       ...(params.primaryTeamId ? { primaryTeamId: params.primaryTeamId } : {}),
       ...(params.projectManagerId ? { projectManagerId: params.projectManagerId } : {}),
+      ...((params as any).memberOnly && params.userId
+        ? {
+            OR: [
+              { members: { some: { userId: params.userId } } },
+              { projectManagerId: params.userId },
+              { createdById: params.userId },
+            ],
+          }
+        : {}),
       ...(params.search
         ? {
             OR: [
