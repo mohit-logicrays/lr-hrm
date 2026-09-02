@@ -51,66 +51,40 @@ interface NavItem {
   resource?: string;
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { label: "Dashboard", href: "/", icon: LayoutDashboard },
+interface NavGroup {
+  title: string;
+  items: NavItem[];
+}
+
+const NAV_GROUPS: NavGroup[] = [
   {
-    label: "Users",
-    href: "/users",
-    icon: Users,
-    resource: "user",
+    title: "Main",
+    items: [{ label: "Dashboard", href: "/", icon: LayoutDashboard }],
   },
   {
-    label: "Teams",
-    href: "/teams",
-    icon: UsersRound,
-    resource: "team",
+    title: "Organization",
+    items: [
+      { label: "Users", href: "/users", icon: Users, resource: "user" },
+      { label: "Teams", href: "/teams", icon: UsersRound, resource: "team" },
+      { label: "Departments", href: "/departments", icon: Building2, resource: "department" },
+      { label: "Roles", href: "/roles", icon: Shield, resource: "role" },
+    ],
   },
   {
-    label: "Roles",
-    href: "/roles",
-    icon: Shield,
-    resource: "role",
+    title: "Work & Time",
+    items: [
+      { label: "Projects", href: "/projects", icon: FolderKanban, resource: "project" },
+      { label: "Leave", href: "/leave", icon: CalendarDays, resource: "leave" },
+      { label: "Holidays", href: "/holidays", icon: CalendarOff, resource: "holiday" },
+      { label: "Time Logs", href: "/time", icon: Clock, resource: "time" },
+    ],
   },
   {
-    label: "Departments",
-    href: "/departments",
-    icon: Building2,
-    resource: "department",
-  },
-  {
-    label: "Projects",
-    href: "/projects",
-    icon: FolderKanban,
-    resource: "project",
-  },
-  {
-    label: "Leave",
-    href: "/leave",
-    icon: CalendarDays,
-    resource: "leave",
-  },
-  {
-    label: "Time",
-    href: "/time",
-    icon: Clock,
-    resource: "time",
-  },
-  {
-    label: "Holidays",
-    href: "/holidays",
-    icon: CalendarOff,
-    resource: "holiday",
-  },
-  {
-    label: "Requests",
-    href: "/requests",
-    icon: ListChecks,
-    resource: "request",
-  },
-  {
-    label: "Settings",
-    href: "/profile",
-    icon: Settings,
+    title: "System & Admin",
+    items: [
+      { label: "Requests", href: "/requests", icon: ListChecks, resource: "request" },
+      { label: "Settings", href: "/profile", icon: Settings },
+    ],
   },
 ];
 
@@ -156,25 +130,27 @@ export function AppSidebar() {
         </Link>
       </SidebarHeader>
 
-      {/* Main Navigation */}
-      <SidebarContent className="px-3 py-4">
-        <SidebarGroup className="p-0">
-          <SidebarGroupLabel className="px-2 text-[11px] font-semibold tracking-wider text-sidebar-foreground/50 uppercase mb-2">
-            Navigation
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu className="gap-1">
-              {NAV_ITEMS.map((item) => (
-                <NavButton
-                  key={item.href}
-                  item={item}
-                  active={pathname === item.href}
-                  role={roleName}
-                />
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+      {/* Grouped Main Navigation */}
+      <SidebarContent className="px-3 py-4 space-y-4">
+        {NAV_GROUPS.map((group) => (
+          <SidebarGroup key={group.title} className="p-0 space-y-1">
+            <SidebarGroupLabel className="px-2 text-[10px] font-bold tracking-wider text-sidebar-foreground/50 uppercase mb-1">
+              {group.title}
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu className="gap-1">
+                {group.items.map((item) => (
+                  <NavButton
+                    key={item.href}
+                    item={item}
+                    active={pathname === item.href}
+                    role={roleName}
+                  />
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ))}
       </SidebarContent>
 
       {/* Footer User Profile Card */}
@@ -183,7 +159,7 @@ export function AppSidebar() {
           <DropdownMenuTrigger asChild>
             <button
               aria-label="User account options"
-              className="flex w-full items-center gap-3 rounded-xl p-2.5 text-left hover:bg-sidebar-accent/80 transition-colors group focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              className="flex w-full items-center gap-3 rounded-xl p-2.5 text-left hover:bg-sidebar-accent/80 transition-colors group focus:outline-none focus-visible:ring-2 focus-visible:ring-brand cursor-pointer"
             >
               <Avatar className="h-9 w-9 border border-sidebar-border/60 shrink-0">
                 <AvatarFallback className="bg-brand text-xs font-bold text-white">
@@ -274,16 +250,16 @@ function NavButton({
         asChild
         isActive={active}
         className={cn(
-          "h-10 px-3.5 rounded-xl font-medium text-sm transition-all duration-200 active:scale-95 flex items-center gap-3",
+          "h-9 px-3 rounded-lg font-medium text-xs transition-all duration-150 flex items-center gap-3 cursor-pointer",
           active
-            ? "bg-brand text-white font-semibold shadow-sm hover:bg-brand/90 hover:text-white"
+            ? "bg-brand! text-white! font-bold shadow-2xs hover:bg-brand! hover:text-white! focus:bg-brand! focus:text-white! data-[active=true]:bg-brand! data-[active=true]:text-white!"
             : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
         )}
       >
         <Link href={item.href}>
           <Icon
             className={cn(
-              "h-4 w-4 shrink-0",
+              "h-4 w-4 shrink-0 transition-colors",
               active ? "text-white" : "text-sidebar-foreground/70"
             )}
           />
@@ -293,4 +269,3 @@ function NavButton({
     </SidebarMenuItem>
   );
 }
-
