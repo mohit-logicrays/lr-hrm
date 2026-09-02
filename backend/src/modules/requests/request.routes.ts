@@ -1,27 +1,16 @@
 import { Router } from "express";
 import * as requestController from "./request.controller";
 import { authenticate } from "../../middleware/auth";
-import { requirePermission } from "../../middleware/rbac";
-import { PERMISSIONS } from "../permissions/permissions.constants";
+import { requireRoles } from "../../middleware/rbac";
 
 const router = Router();
 
 router.use(authenticate);
+// Enforce Superadmin-only access for request monitoring and log inspection
+router.use(requireRoles("SUPERADMIN", "superadmin"));
 
-router.get(
-  "/analytics",
-  requirePermission(PERMISSIONS.REQUEST_LOG_READ),
-  requestController.getAnalytics
-);
-router.get(
-  "/",
-  requirePermission(PERMISSIONS.REQUEST_LOG_READ),
-  requestController.listRequests
-);
-router.get(
-  "/:id",
-  requirePermission(PERMISSIONS.REQUEST_LOG_READ),
-  requestController.getRequest
-);
+router.get("/analytics", requestController.getAnalytics);
+router.get("/", requestController.listRequests);
+router.get("/:id", requestController.getRequest);
 
 export default router;

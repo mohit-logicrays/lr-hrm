@@ -492,9 +492,22 @@ export interface RequestAnalytics {
   totalRequests: number;
   successRequests: number;
   errorRequests: number;
+  clientErrorRequests?: number;
+  serverErrorRequests?: number;
   successRate: number;
+  errorRate?: number;
   avgResponseTimeMs: number;
-  countsByMethod: { method: string; _count: { _all: number } }[];
+  maxResponseTimeMs?: number;
+  minResponseTimeMs?: number;
+  countsByMethod: { method: string; count: number; _count?: { _all: number } }[];
+  topSlowEndpoints?: { url: string; avgLatencyMs: number; count: number }[];
+  topActiveIps?: { ipAddress: string; count: number }[];
+  statusDistribution?: {
+    status2xx: number;
+    status3xx: number;
+    status4xx: number;
+    status5xx: number;
+  };
 }
 
 // ---------- Client ----------
@@ -1154,6 +1167,9 @@ export const api = {
     request<ListResponse<RequestLog>>(
       `/api/v1/requests${qs({ page, limit, ...opts })}`
     ),
+
+  getRequestLog: (id: string) =>
+    request<ItemResponse<RequestLog>>(`/api/v1/requests/${id}`),
 
   requestAnalytics: () =>
     request<ItemResponse<RequestAnalytics>>("/api/v1/requests/analytics"),

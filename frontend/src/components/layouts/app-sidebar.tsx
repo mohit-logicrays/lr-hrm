@@ -251,11 +251,18 @@ function NavButton({
   active: boolean;
   role?: string;
 }) {
+  const isSuperadmin = (role || "").toUpperCase() === "SUPERADMIN";
+
+  // Requests module MUST be visible ONLY to SUPERADMIN
+  if (item.href === "/requests" && !isSuperadmin) {
+    return null;
+  }
+
   const perms = usePermission(item.resource ?? "");
   const canRead =
     perms.read || perms.read_all || perms.read_own || perms.type_read;
 
-  if (item.resource && role !== "superadmin" && !canRead) {
+  if (item.resource && !isSuperadmin && !canRead) {
     return null;
   }
 
