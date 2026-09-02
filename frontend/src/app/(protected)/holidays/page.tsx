@@ -1,272 +1,549 @@
 "use client";
 
-import { useCallback, useEffect, useState, FormEvent } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { api, Holiday } from "@/lib/api";
-import { usePermission } from "@/providers/auth-provider";
-import { PageHeader } from "@/components/shared/page-header";
-import { PaginationBar } from "@/components/shared/pagination-bar";
-import { Badge } from "@/components/ui/badge";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  api,
+  type Holiday,
+  type HolidayType,
+} from "@/lib/api";
+import { useAuth } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { AddEditHolidaySheet } from "@/components/holidays/AddEditHolidaySheet";
+import { ImportHolidayModal } from "@/components/holidays/ImportHolidayModal";
+import { UpcomingHolidaysWidget } from "@/components/holidays/UpcomingHolidaysWidget";
+import { RichTextViewer } from "@/components/ui/rich-text-editor";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Skeleton } from "@/components/ui/skeleton";
-import { CalendarPlus, Pencil, Plus, Search, Trash2 } from "lucide-react";
+  Calendar as CalendarIcon,
+  CalendarDays,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Edit,
+  FileSpreadsheet,
+  Filter,
+  Globe,
+  LayoutGrid,
+  List,
+  Plus,
+  PartyPopper,
+  Search,
+  Sparkles,
+  Trash2,
+  Upload,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 
-export default function HolidaysPage() {
-  const perms = usePermission("holiday");
-  const [result, setResult] = useState<{ data: Holiday[]; total: number; totalPages: number } | null>(null);
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
-  const [year, setYear] = useState<string>("");
+export default function HolidayManagementPage() {
+  const { user } = useAuth();
+  const roleName = typeof user?.role === "string" ? user.role : (user?.role as any)?.name || "";
+  const isHr = ["SUPERADMIN", "HR_ADMIN", "ADMIN"].includes(roleName.toUpperCase());
+
+  const [year, setYear] = useState<number>(new Date().getFullYear());
+  const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
+  const [upcomingHolidays, setUpcomingHolidays] = useState<Holiday[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dialog, setDialog] = useState<"create" | { edit: Holiday } | null>(null);
+  const [search, setSearch] = useState("");
 
-  const load = useCallback(async () => {
+  // Modal / Sheet States
+  const [isAddEditOpen, setIsAddEditOpen] = useState(false);
+  const [editingHoliday, setEditingHoliday] = useState<Holiday | null>(null);
+  const [isImportOpen, setIsImportOpen] = useState(false);
+
+  // Calendar Month State
+  const [calendarMonth, setCalendarMonth] = useState(new Date());
+
+  const loadData = useCallback(async () => {
     try {
-      const res = await api.listHolidays(page, 10, year ? Number(year) : undefined, search);
-      setResult({ data: res.data, total: res.pagination.total, totalPages: res.pagination.totalPages });
+      setLoading(true);
+      const [res, upcomingRes] = await Promise.all([
+        api.listHolidays(1, 100, year, search),
+        api.getUpcomingHolidays(),
+      ]);
+
+      setHolidays(res.data);
+      setUpcomingHolidays(upcomingRes.data || []);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load holidays");
     } finally {
       setLoading(false);
     }
-  }, [page, search, year]);
+  }, [year, search]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    loadData();
+  }, [loadData]);
 
-  async function remove(h: Holiday) {
-    if (!window.confirm(`Delete holiday "${h.name}"?`)) return;
+  async function handleDelete(id: string, name: string) {
+    if (!window.confirm(`Are you sure you want to delete "${name}"?`)) return;
     try {
-      await api.deleteHoliday(h.id);
-      toast.success("Holiday deleted");
-      load();
+      await api.deleteHoliday(id);
+      toast.success(`Holiday "${name}" deleted`);
+      loadData();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to delete holiday");
+      toast.error("Failed to delete holiday");
     }
   }
 
-  const years = Array.from(new Set([new Date().getFullYear(), ...(result?.data.map((h) => h.year) ?? [])])).sort();
+  function downloadTemplate() {
+    const csvContent = [
+      "Holiday Name,Date,Type,Is Optional,Description",
+      "Republic Day,2026-01-26,National,No,National Republic Day Observance",
+      "Holi,2026-03-25,Restricted,Yes,Festival of Colors (Optional)",
+      "Founders Day,2026-08-15,Company,No,Logic Rays Company Celebration",
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "holiday_import_template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Downloaded sample CSV template");
+  }
+
+  // Summary Metrics
+  const totalHolidays = holidays.length;
+  const nationalCount = holidays.filter((h) => h.type === "NATIONAL").length;
+  const restrictedCount = holidays.filter((h) => h.type === "RESTRICTED" || h.isOptional).length;
+  const companyCount = holidays.filter((h) => h.type === "COMPANY").length;
+
+  // Calendar Calculations
+  const curYear = calendarMonth.getFullYear();
+  const curMonth = calendarMonth.getMonth();
+  const monthName = calendarMonth.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  const daysInMonth = new Date(curYear, curMonth + 1, 0).getDate();
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Holidays"
-        subtitle={result ? `${result.total} holidays` : "Company holidays and observances"}
-        actions={
-          perms.manage ? (
-            <Button onClick={() => setDialog("create")}>
-              <CalendarPlus /> Add holiday
-            </Button>
-          ) : undefined
-        }
-      />
-
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary" />
-          <Input
-            className="pl-9"
-            placeholder="Search holidays…"
-            value={search}
-            onChange={(e) => {
-              setPage(1);
-              setSearch(e.target.value);
-            }}
-          />
+    <div className="space-y-6 flex flex-col min-h-[calc(100vh-100px)]">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="font-heading text-2xl font-bold text-text-primary tracking-tight">
+            Holiday Management
+          </h1>
+          <p className="text-xs text-text-tertiary mt-1">
+            View and manage company holidays, observances, and restricted days.
+          </p>
         </div>
-        <input
-          aria-label="Year"
-          type="number"
-          min={2000}
-          max={2100}
-          className="h-10 w-24 rounded-md border border-border-base bg-surface px-3 text-sm"
-          placeholder="Year"
-          value={year}
-          onChange={(e) => {
-            setPage(1);
-            setYear(e.target.value);
-          }}
-        />
+
+        {/* Action Controls */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Year Selector */}
+          <select
+            className="h-9 rounded-md border border-border-base bg-surface px-3 text-xs font-bold text-text-primary focus:border-brand focus:outline-none cursor-pointer"
+            value={year}
+            onChange={(e) => setYear(Number(e.target.value))}
+          >
+            <option value={2026}>2026</option>
+            <option value={2025}>2025</option>
+            <option value={2024}>2024</option>
+          </select>
+
+          {/* View Mode Toggle */}
+          <div className="flex items-center rounded-md border border-border-base bg-surface p-0.5">
+            <button
+              onClick={() => setViewMode("calendar")}
+              className={cn(
+                "rounded-md px-2.5 py-1 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all",
+                viewMode === "calendar" ? "bg-brand text-white shadow-2xs" : "text-text-tertiary hover:text-text-primary"
+              )}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" /> Calendar
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              className={cn(
+                "rounded-md px-2.5 py-1 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all",
+                viewMode === "list" ? "bg-brand text-white shadow-2xs" : "text-text-tertiary hover:text-text-primary"
+              )}
+            >
+              <List className="h-3.5 w-3.5" /> List
+            </button>
+          </div>
+
+          {/* HR Only Action Buttons */}
+          {isHr && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={downloadTemplate}
+                className="h-9 text-xs gap-1.5"
+                title="Download CSV Template"
+              >
+                <Download className="h-3.5 w-3.5" /> Template
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsImportOpen(true)}
+                className="h-9 text-xs gap-1.5 border-brand/30 text-brand hover:bg-brand/5"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5" /> Import CSV
+              </Button>
+              <Button
+                onClick={() => {
+                  setEditingHoliday(null);
+                  setIsAddEditOpen(true);
+                }}
+                className="h-9 text-xs bg-brand hover:bg-brand-hover text-white px-4 font-semibold gap-1.5 shadow-2xs cursor-pointer"
+              >
+                <Plus className="h-4 w-4" /> Add Holiday
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
-      <div className="rounded-lg border border-border-base bg-surface">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Date</TableHead>
-              <TableHead>Year</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={i}>
-                  {Array.from({ length: 5 }).map((_, j) => (
-                    <TableCell key={j}>
-                      <Skeleton className="h-4 w-full" />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            ) : (
-              result?.data.map((h) => (
-                <TableRow key={h.id}>
-                  <TableCell className="font-medium">{h.name}</TableCell>
-                  <TableCell className="text-text-secondary">
-                    {new Date(h.date).toLocaleDateString(undefined, {
-                      weekday: "short",
-                      year: "numeric",
-                      month: "short",
-                      day: "numeric",
-                    })}
-                  </TableCell>
-                  <TableCell className="text-text-secondary">{h.year}</TableCell>
-                  <TableCell>
-                    <Badge className={h.isOptional ? "bg-warning-light text-warning" : "bg-info-light text-info"}>
-                      {h.isOptional ? "Optional" : "Mandatory"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex justify-end gap-1">
-                      {perms.manage && (
-                        <>
-                          <Button variant="ghost" size="icon-sm" aria-label="Edit" onClick={() => setDialog({ edit: h })}>
-                            <Pencil />
-                          </Button>
-                          <Button variant="ghost" size="icon-sm" aria-label="Delete" className="text-muted-foreground hover:text-error" onClick={() => remove(h)}>
-                            <Trash2 />
-                          </Button>
-                        </>
+      {/* Summary Cards Row (4 Bento-Style Metric Cards) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="p-5 border border-border-base bg-surface rounded-xl shadow-2xs hover:shadow-md transition-shadow relative overflow-hidden group space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="w-10 h-10 rounded-full bg-brand/10 text-brand flex items-center justify-center font-bold">
+              <Globe className="h-5 w-5" />
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
+              National Holidays
+            </span>
+          </div>
+          <div>
+            <span className="font-heading text-3xl font-extrabold text-text-primary">{nationalCount}</span>
+            <p className="text-[11px] text-text-tertiary mt-0.5">Mandatory company-wide</p>
+          </div>
+        </Card>
+
+        <Card className="p-5 border border-border-base bg-surface rounded-xl shadow-2xs hover:shadow-md transition-shadow relative overflow-hidden group space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="w-10 h-10 rounded-full bg-warning/10 text-warning flex items-center justify-center font-bold">
+              <CalendarDays className="h-5 w-5" />
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
+              Restricted (Floating)
+            </span>
+          </div>
+          <div>
+            <span className="font-heading text-3xl font-extrabold text-text-primary">{restrictedCount}</span>
+            <p className="text-[11px] text-warning font-semibold mt-0.5">Optional observances</p>
+          </div>
+        </Card>
+
+        <Card className="p-5 border border-border-base bg-surface rounded-xl shadow-2xs hover:shadow-md transition-shadow relative overflow-hidden group space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="w-10 h-10 rounded-full bg-info/10 text-info flex items-center justify-center font-bold">
+              <PartyPopper className="h-5 w-5" />
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
+              Company Events
+            </span>
+          </div>
+          <div>
+            <span className="font-heading text-3xl font-extrabold text-text-primary">{companyCount}</span>
+            <p className="text-[11px] text-text-tertiary mt-0.5">Special internal observances</p>
+          </div>
+        </Card>
+
+        <Card className="p-5 border border-border-base bg-surface rounded-xl shadow-2xs hover:shadow-md transition-shadow relative overflow-hidden group space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="w-10 h-10 rounded-full bg-success/10 text-success flex items-center justify-center font-bold">
+              <Sparkles className="h-5 w-5" />
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
+              Upcoming (60 Days)
+            </span>
+          </div>
+          <div>
+            <span className="font-heading text-3xl font-extrabold text-text-primary">
+              {upcomingHolidays.length}
+            </span>
+            <p className="text-[11px] text-success font-semibold mt-0.5">Next upcoming holiday</p>
+          </div>
+        </Card>
+      </div>
+
+      {/* Main Workspace Layout (3 Cols Left Calendar/Table | 1 Col Right Sidebar) */}
+      <div className="grid grid-cols-12 gap-6 flex-1">
+        {/* Main Section (9 Cols) */}
+        <div className="col-span-12 lg:col-span-8 space-y-4">
+          {viewMode === "calendar" ? (
+            /* Calendar View */
+            <Card className="border border-border-base bg-surface rounded-xl shadow-2xs overflow-hidden flex flex-col">
+              {/* Calendar Controls */}
+              <div className="px-6 py-4 border-b border-border-base flex justify-between items-center bg-surface-subtle/30">
+                <div className="flex items-center gap-3">
+                  <h3 className="font-heading text-sm font-bold text-text-primary flex items-center gap-2">
+                    <CalendarIcon className="h-4 w-4 text-brand" /> {monthName}
+                  </h3>
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    onClick={() => setCalendarMonth(new Date())}
+                    className="text-[11px] h-7"
+                  >
+                    Today
+                  </Button>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="outline"
+                    size="icon-xs"
+                    onClick={() =>
+                      setCalendarMonth(new Date(curYear, curMonth - 1, 1))
+                    }
+                    className="h-7 w-7"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon-xs"
+                    onClick={() =>
+                      setCalendarMonth(new Date(curYear, curMonth + 1, 1))
+                    }
+                    className="h-7 w-7"
+                  >
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Calendar Day Header */}
+              <div className="grid grid-cols-7 border-b border-border-base bg-surface-subtle/40 text-center font-bold text-[10px] text-text-tertiary uppercase py-2">
+                <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+              </div>
+
+              {/* Calendar Grid */}
+              <div className="grid grid-cols-7 gap-px bg-border-base/40 text-xs">
+                {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
+                  const dateObj = new Date(curYear, curMonth, day);
+                  const isToday =
+                    new Date().toDateString() === dateObj.toDateString();
+
+                  // Find holidays falling on this date
+                  const dayHolidays = holidays.filter((h) => {
+                    const hd = new Date(h.date);
+                    return (
+                      hd.getFullYear() === curYear &&
+                      hd.getMonth() === curMonth &&
+                      hd.getDate() === day
+                    );
+                  });
+
+                  return (
+                    <div
+                      key={day}
+                      className={cn(
+                        "p-2 bg-surface min-h-[90px] flex flex-col justify-start hover:bg-surface-subtle/40 transition-colors relative group",
+                        isToday && "ring-2 ring-brand ring-inset"
                       )}
+                    >
+                      <div className="flex justify-between items-center text-[11px] font-mono font-bold text-text-tertiary mb-1">
+                        {isToday && (
+                          <span className="text-[9px] font-bold text-brand uppercase">Today</span>
+                        )}
+                        <span className={cn("ml-auto", isToday && "text-brand font-bold")}>
+                          {day}
+                        </span>
+                      </div>
+
+                      {/* Holiday Items */}
+                      <div className="space-y-1 overflow-y-auto max-h-[60px] pr-0.5">
+                        {dayHolidays.map((h) => (
+                          <div
+                            key={h.id}
+                            onClick={() => {
+                              if (isHr) {
+                                setEditingHoliday(h);
+                                setIsAddEditOpen(true);
+                              }
+                            }}
+                            className={cn(
+                              "p-1.5 rounded border text-[10px] font-semibold flex items-center gap-1 cursor-pointer transition-all shadow-2xs",
+                              h.type === "NATIONAL" && "bg-brand/10 border-brand/30 text-brand",
+                              h.type === "RESTRICTED" && "bg-warning/10 border-warning/30 text-warning",
+                              h.type === "COMPANY" && "bg-info/10 border-info/30 text-info"
+                            )}
+                            title={`${h.name} (${h.type})`}
+                          >
+                            <span
+                              className={cn(
+                                "w-1.5 h-1.5 rounded-full shrink-0",
+                                h.type === "NATIONAL" && "bg-brand",
+                                h.type === "RESTRICTED" && "bg-warning",
+                                h.type === "COMPANY" && "bg-info"
+                              )}
+                            />
+                            <span className="truncate">{h.name}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+                  );
+                })}
+              </div>
+            </Card>
+          ) : (
+            /* List View */
+            <Card className="border border-border-base bg-surface rounded-xl shadow-2xs overflow-hidden">
+              <div className="p-4 border-b border-border-base flex items-center justify-between">
+                <div className="relative w-64">
+                  <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-tertiary" />
+                  <input
+                    className="w-full h-8 pl-8 pr-3 bg-surface border border-border-base rounded-md text-xs focus:border-brand focus:outline-none"
+                    placeholder="Search holiday name..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                </div>
+                <span className="text-xs text-text-tertiary font-mono">
+                  Total: {holidays.length} Holidays
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-surface-subtle/40 border-b border-border-base text-[11px] font-bold text-text-tertiary uppercase tracking-wider">
+                      <th className="py-3 px-6">Holiday Name</th>
+                      <th className="py-3 px-6">Date</th>
+                      <th className="py-3 px-6">Day</th>
+                      <th className="py-3 px-6">Type</th>
+                      <th className="py-3 px-6">Optional</th>
+                      {isHr && <th className="py-3 px-6 text-right">Actions</th>}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border-base/50 text-xs">
+                    {loading ? (
+                      <tr>
+                        <td colSpan={6} className="py-8 text-center text-text-tertiary">
+                          Loading holidays...
+                        </td>
+                      </tr>
+                    ) : holidays.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-8 text-center text-text-tertiary">
+                          No holidays found for year {year}.
+                        </td>
+                      </tr>
+                    ) : (
+                      holidays.map((h) => {
+                        const dateObj = new Date(h.date);
+                        const dayName = dateObj.toLocaleDateString(undefined, { weekday: "long" });
+
+                        return (
+                          <tr key={h.id} className="hover:bg-surface-subtle/30 transition-colors group">
+                            <td className="py-3 px-6 font-semibold text-text-primary flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-brand/10 text-brand flex items-center justify-center font-bold shrink-0">
+                                <PartyPopper className="h-4 w-4" />
+                              </div>
+                              <div>
+                                <p className="font-bold text-text-primary">{h.name}</p>
+                                {h.description && (
+                                  <div className="text-[10px] text-text-tertiary line-clamp-1">
+                                    <RichTextViewer content={h.description} />
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+
+                            <td className="py-3 px-6 font-mono font-semibold text-text-tertiary">
+                              {dateObj.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                            </td>
+
+                            <td className="py-3 px-6 text-text-tertiary">{dayName}</td>
+
+                            <td className="py-3 px-6">
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "text-[10px] px-2 py-0.5 font-bold uppercase tracking-wider rounded-md",
+                                  h.type === "NATIONAL" && "bg-brand/10 text-brand border-brand/30",
+                                  h.type === "RESTRICTED" && "bg-warning/10 text-warning border-warning/30",
+                                  h.type === "COMPANY" && "bg-info/10 text-info border-info/30"
+                                )}
+                              >
+                                {h.type}
+                              </Badge>
+                            </td>
+
+                            <td className="py-3 px-6">
+                              {h.isOptional ? (
+                                <Badge variant="outline" className="text-[9px] bg-surface-subtle text-text-tertiary">
+                                  Yes
+                                </Badge>
+                              ) : (
+                                <span className="text-text-tertiary font-mono">—</span>
+                              )}
+                            </td>
+
+                            {isHr && (
+                              <td className="py-3 px-6 text-right">
+                                <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon-xs"
+                                    onClick={() => {
+                                      setEditingHoliday(h);
+                                      setIsAddEditOpen(true);
+                                    }}
+                                    className="h-7 w-7 text-text-tertiary hover:text-brand"
+                                    title="Edit"
+                                  >
+                                    <Edit className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon-xs"
+                                    onClick={() => handleDelete(h.id, h.name)}
+                                    className="h-7 w-7 text-text-tertiary hover:text-error"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
+        </div>
+
+        {/* Right Sidebar (4 Cols) */}
+        <div className="col-span-12 lg:col-span-4 space-y-4">
+          <UpcomingHolidaysWidget holidays={upcomingHolidays} />
+        </div>
       </div>
 
-      {years.length > 1 && (
-        <div className="flex items-center gap-2 text-xs text-text-tertiary">
-          <Plus className="h-3 w-3" />
-          {years.map((y) => y).join(" · ")}
-        </div>
-      )}
-
-      <PaginationBar
-        pagination={result ? { total: result.total, page, pageSize: 10, totalPages: result.totalPages, hasPrevious: page > 1, hasNext: page < result.totalPages, previous: page > 1 ? page - 1 : null, next: page < result.totalPages ? page + 1 : null } : null}
-        onPrev={() => setPage((p) => Math.max(1, p - 1))}
-        onNext={() => setPage((p) => p + 1)}
+      {/* Manual Entry Drawer */}
+      <AddEditHolidaySheet
+        holiday={editingHoliday}
+        isOpen={isAddEditOpen}
+        onClose={() => {
+          setIsAddEditOpen(false);
+          setEditingHoliday(null);
+        }}
+        onSuccess={() => loadData()}
       />
 
-      {dialog && (
-        <HolidayDialog
-          holiday={dialog === "create" ? null : (dialog as { edit: Holiday }).edit}
-          onClose={() => setDialog(null)}
-          onSaved={() => {
-            setDialog(null);
-            load();
-          }}
-        />
-      )}
+      {/* Bulk CSV Import Modal */}
+      <ImportHolidayModal
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        onSuccess={() => loadData()}
+      />
     </div>
-  );
-}
-
-function HolidayDialog({
-  holiday,
-  onClose,
-  onSaved,
-}: {
-  holiday: Holiday | null;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState(() => ({
-    name: holiday?.name ?? "",
-    date: holiday?.date?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
-    isOptional: holiday?.isOptional ?? false,
-  }));
-
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    if (!form.name.trim() || !form.date) return;
-    setSaving(true);
-    try {
-      if (holiday) {
-        await api.updateHoliday(holiday.id, {
-          name: form.name,
-          date: form.date,
-          isOptional: form.isOptional,
-        });
-        toast.success("Holiday updated");
-      } else {
-        await api.createHoliday({
-          name: form.name,
-          date: form.date,
-          isOptional: form.isOptional,
-        });
-        toast.success("Holiday added");
-      }
-      onSaved();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save holiday");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent className="rounded-lg sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{holiday ? "Edit holiday" : "Add holiday"}</DialogTitle>
-          <DialogDescription>Holidays are considered when calculating leave days.</DialogDescription>
-        </DialogHeader>
-        <form onSubmit={onSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="name">Name</Label>
-            <Input id="name" required placeholder="e.g. Independence Day" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="date">Date</Label>
-            <Input id="date" type="date" required value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
-          </div>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={form.isOptional} onChange={(e) => setForm({ ...form, isOptional: e.target.checked })} />
-            Optional holiday
-          </label>
-          <DialogFooter>
-            <Button type="submit" disabled={saving}>
-              {saving ? "Saving…" : holiday ? "Save changes" : "Add holiday"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   );
 }

@@ -457,13 +457,19 @@ export interface LeaveBalanceResponse {
 
 // ---------- Holidays ----------
 
+export type HolidayType = "NATIONAL" | "RESTRICTED" | "COMPANY";
+
 export interface Holiday {
   id: string;
   name: string;
   date: string;
   year: number;
+  type: HolidayType;
   isOptional: boolean;
+  description?: string | null;
+  createdById?: string | null;
   createdAt?: string;
+  updatedAt?: string;
 }
 
 // ---------- Requests / Analytics ----------
@@ -1107,12 +1113,15 @@ export const api = {
     }),
 
   // ---- Holidays ----
-  listHolidays: (page = 1, pageSize = 10, year?: number, search = "") =>
+  listHolidays: (page = 1, pageSize = 50, year?: number, search = "", type?: HolidayType) =>
     request<ListResponse<Holiday>>(
-      `/api/v1/holidays${qs({ page, pageSize, year, search })}`
+      `/api/v1/holidays${qs({ page, pageSize, year, search, type })}`
     ),
 
-  createHoliday: (payload: { name: string; date: string; isOptional?: boolean }) =>
+  getUpcomingHolidays: () =>
+    request<ItemResponse<Holiday[]>>("/api/v1/holidays/upcoming"),
+
+  createHoliday: (payload: { name: string; date: string; type?: HolidayType; isOptional?: boolean; description?: string | null }) =>
     request<ItemResponse<Holiday>>("/api/v1/holidays", {
       method: "POST",
       body: JSON.stringify(payload),
@@ -1120,7 +1129,7 @@ export const api = {
 
   updateHoliday: (
     id: string,
-    payload: { name?: string; date?: string; isOptional?: boolean }
+    payload: { name?: string; date?: string; type?: HolidayType; isOptional?: boolean; description?: string | null }
   ) =>
     request<ItemResponse<Holiday>>(`/api/v1/holidays/${id}`, {
       method: "PATCH",
@@ -1129,6 +1138,12 @@ export const api = {
 
   deleteHoliday: (id: string) =>
     request<void>(`/api/v1/holidays/${id}`, { method: "DELETE" }),
+
+  importHolidaysCsv: (holidays: Array<{ name: string; date: string; type?: HolidayType; isOptional?: boolean; description?: string | null }>) =>
+    request<ItemResponse<{ importedCount: number; failedCount: number; invalidRows: Array<{ row: number; data: any; reason: string }> }>>("/api/v1/holidays/import", {
+      method: "POST",
+      body: JSON.stringify({ holidays }),
+    }),
 
   // ---- Request logs / analytics ----
   listRequestLogs: (

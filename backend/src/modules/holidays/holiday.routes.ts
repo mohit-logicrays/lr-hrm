@@ -8,17 +8,28 @@ const router = Router();
 
 router.use(authenticate);
 
+router.get("/template", requirePermission(PERMISSIONS.HOLIDAY_READ), holidayController.downloadTemplate);
+router.get("/upcoming", requirePermission(PERMISSIONS.HOLIDAY_READ), holidayController.getUpcomingHolidays);
 router.get("/", requirePermission(PERMISSIONS.HOLIDAY_READ), holidayController.listHolidays);
+
+router.post(
+  "/import",
+  requirePermission(PERMISSIONS.HOLIDAY_MANAGE),
+  holidayController.importHolidays
+);
+
 router.post(
   "/",
   requirePermission(PERMISSIONS.HOLIDAY_MANAGE),
   holidayController.createHoliday
 );
+
 router.patch(
   "/:id",
   requirePermission(PERMISSIONS.HOLIDAY_MANAGE),
   holidayController.updateHoliday
 );
+
 router.delete(
   "/:id",
   requirePermission(PERMISSIONS.HOLIDAY_MANAGE),

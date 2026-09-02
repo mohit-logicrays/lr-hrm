@@ -6,6 +6,7 @@ import {
   createHolidaySchema,
   updateHolidaySchema,
   holidayQuerySchema,
+  importHolidayPayloadSchema,
 } from "./holiday.schema";
 
 export const listHolidays = asyncHandler(async (req: Request, res: Response) => {
@@ -16,7 +17,7 @@ export const listHolidays = asyncHandler(async (req: Request, res: Response) => 
 
 export const createHoliday = asyncHandler(async (req: Request, res: Response) => {
   const body = createHolidaySchema.parse(req.body);
-  const holiday = await holidayService.create(body);
+  const holiday = await holidayService.create(body, req.user?.id);
   ApiResponse.success(res, 201, "Holiday created", holiday);
 });
 
@@ -29,4 +30,22 @@ export const updateHoliday = asyncHandler(async (req: Request, res: Response) =>
 export const deleteHoliday = asyncHandler(async (req: Request, res: Response) => {
   await holidayService.remove(req.params.id);
   ApiResponse.success(res, 200, "Holiday deleted");
+});
+
+export const getUpcomingHolidays = asyncHandler(async (req: Request, res: Response) => {
+  const upcoming = await holidayService.getUpcoming();
+  ApiResponse.success(res, 200, "Upcoming holidays fetched", upcoming);
+});
+
+export const downloadTemplate = asyncHandler(async (req: Request, res: Response) => {
+  const csv = holidayService.getTemplateCsv();
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader("Content-Disposition", 'attachment; filename="holiday_import_template.csv"');
+  res.status(200).send(csv);
+});
+
+export const importHolidays = asyncHandler(async (req: Request, res: Response) => {
+  const body = importHolidayPayloadSchema.parse(req.body);
+  const result = await holidayService.importBulk(body.holidays, req.user?.id);
+  ApiResponse.success(res, 200, "Holidays imported successfully", result);
 });
