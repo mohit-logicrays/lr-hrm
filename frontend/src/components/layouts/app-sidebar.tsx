@@ -132,6 +132,9 @@ export function AppSidebar() {
             <span className="text-[11px] font-medium text-sidebar-foreground/60 tracking-wider uppercase truncate">
               HRM Portal
             </span>
+            <p className="text-[10px] font-medium text-sidebar-foreground/40 truncate mt-0.5">
+              Enterprise HR & Talent Suite
+            </p>
           </div>
         </Link>
       </SidebarHeader>
@@ -139,10 +142,12 @@ export function AppSidebar() {
       {/* Grouped Main Navigation */}
       <SidebarContent className="px-3 py-4 space-y-4">
         {NAV_GROUPS.map((group) => (
-          <SidebarGroup key={group.title} className="p-0 space-y-1">
-            <SidebarGroupLabel className="px-2 text-[10px] font-bold tracking-wider text-sidebar-foreground/50 uppercase mb-1">
-              {group.title}
-            </SidebarGroupLabel>
+          <SidebarGroup key={group.title || "main"} className="p-0 space-y-1">
+            {group.title && group.title !== "Main" && (
+              <SidebarGroupLabel className="px-2 text-[10px] font-bold tracking-wider text-sidebar-foreground/50 uppercase mb-1">
+                {group.title}
+              </SidebarGroupLabel>
+            )}
             <SidebarGroupContent>
               <SidebarMenu className="gap-1">
                 {group.items.map((item) => (
