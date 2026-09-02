@@ -40,6 +40,21 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+// Framer Motion Animation Variants
+const containerVariants = {
+  hidden: { opacity: 0, y: 15 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.3, staggerChildren: 0.08 },
+  },
+};
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 12, scale: 0.98 },
+  visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.25 } },
+};
+
 function getMethodBadge(method: string) {
   const m = method.toUpperCase();
   switch (m) {
@@ -128,7 +143,7 @@ export default function RequestsPage() {
         setEndpointStats((res.data as any).endpointStats);
       }
     } catch (err) {
-      // Fallback if detail fetch fails
+      // Fallback
     } finally {
       setLoadingInspect(false);
     }
@@ -137,7 +152,12 @@ export default function RequestsPage() {
   // If user is NOT Superadmin, render 403 Forbidden Access Card
   if (!isSuperadmin) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[70vh] p-6 text-center space-y-4">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.3 }}
+        className="flex flex-col items-center justify-center min-h-[70vh] p-6 text-center space-y-4"
+      >
         <div className="w-16 h-16 rounded-2xl bg-error/10 text-error flex items-center justify-center shadow-md">
           <ShieldAlert className="h-8 w-8" />
         </div>
@@ -152,7 +172,7 @@ export default function RequestsPage() {
         <Badge variant="outline" className="text-xs px-3 py-1 font-mono bg-surface-subtle text-text-tertiary">
           HTTP 403 Forbidden
         </Badge>
-      </div>
+      </motion.div>
     );
   }
 
@@ -165,9 +185,14 @@ export default function RequestsPage() {
   });
 
   return (
-    <div className="space-y-6 flex flex-col min-h-[calc(100vh-100px)]">
+    <motion.div
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+      className="space-y-6 flex flex-col min-h-[calc(100vh-100px)]"
+    >
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <motion.div variants={cardVariants} className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <div className="flex items-center gap-2">
             <h1 className="font-heading text-2xl font-bold text-text-primary tracking-tight">
@@ -187,95 +212,102 @@ export default function RequestsPage() {
             variant="outline"
             size="sm"
             onClick={loadData}
-            className="h-9 text-xs gap-1.5"
+            className="h-9 text-xs gap-1.5 cursor-pointer"
           >
             <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} /> Refresh Telemetry
           </Button>
         </div>
-      </div>
+      </motion.div>
 
       {/* Summary Cards Row (4 Bento Metric Cards) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="p-5 border border-border-base bg-surface rounded-xl shadow-2xs space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="w-10 h-10 rounded-full bg-brand/10 text-brand flex items-center justify-center font-bold">
-              <Activity className="h-5 w-5" />
-            </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
-              Total Traffic (24h)
-            </span>
-          </div>
-          <div>
-            <span className="font-heading text-3xl font-extrabold text-text-primary">
-              {analytics ? analytics.totalRequests.toLocaleString() : "—"}
-            </span>
-            <p className="text-[11px] text-text-tertiary mt-0.5">Recorded HTTP Invocations</p>
-          </div>
-        </Card>
-
-        <Card className="p-5 border border-border-base bg-surface rounded-xl shadow-2xs space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="w-10 h-10 rounded-full bg-success/10 text-success flex items-center justify-center font-bold">
-              <CheckCircle2 className="h-5 w-5" />
-            </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
-              Success Rate (200 OK)
-            </span>
-          </div>
-          <div>
-            <span className="font-heading text-3xl font-extrabold text-text-primary">
-              {analytics ? `${analytics.successRate}%` : "—"}
-            </span>
-            <p className="text-[11px] text-success font-semibold mt-0.5">Healthy execution ratio</p>
-          </div>
-        </Card>
-
-        <Card className="p-5 border border-border-base bg-surface rounded-xl shadow-2xs space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="w-10 h-10 rounded-full bg-info/10 text-info flex items-center justify-center font-bold">
-              <Gauge className="h-5 w-5" />
-            </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
-              Latency Spectrum
-            </span>
-          </div>
-          <div>
-            <div className="flex items-baseline gap-1">
-              <span className="font-heading text-3xl font-extrabold text-text-primary">
-                {analytics ? `${analytics.avgResponseTimeMs}` : "—"}
+      <motion.div variants={cardVariants} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <motion.div whileHover={{ y: -2 }} transition={{ duration: 0.2 }}>
+          <Card className="p-5 border border-border-base bg-surface rounded-xl shadow-2xs space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="w-10 h-10 rounded-full bg-brand/10 text-brand flex items-center justify-center font-bold">
+                <Activity className="h-5 w-5" />
+              </div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
+                Total Traffic (24h)
               </span>
-              <span className="text-xs font-mono text-text-tertiary">ms avg</span>
             </div>
-            <p className="text-[11px] text-info font-semibold mt-0.5">
-              Max: {analytics?.maxResponseTimeMs || 0} ms · Min: {analytics?.minResponseTimeMs || 0} ms
-            </p>
-          </div>
-        </Card>
-
-        <Card className="p-5 border border-border-base bg-surface rounded-xl shadow-2xs space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="w-10 h-10 rounded-full bg-error/10 text-error flex items-center justify-center font-bold">
-              <AlertTriangle className="h-5 w-5" />
+            <div>
+              <span className="font-heading text-3xl font-extrabold text-text-primary">
+                {analytics ? analytics.totalRequests.toLocaleString() : "—"}
+              </span>
+              <p className="text-[11px] text-text-tertiary mt-0.5">Recorded HTTP Invocations</p>
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
-              Exceptions (4xx / 5xx)
-            </span>
-          </div>
-          <div>
-            <span className="font-heading text-3xl font-extrabold text-text-primary">
-              {analytics ? analytics.errorRequests.toLocaleString() : "—"}
-            </span>
-            <p className="text-[11px] text-error font-semibold mt-0.5">
-              4xx: {analytics?.clientErrorRequests || 0} · 5xx: {analytics?.serverErrorRequests || 0}
-            </p>
-          </div>
-        </Card>
-      </div>
+          </Card>
+        </motion.div>
 
-      {/* Advanced Telemetry Insights Grid (Top Slow Endpoints + Method Distribution) */}
+        <motion.div whileHover={{ y: -2 }} transition={{ duration: 0.2 }}>
+          <Card className="p-5 border border-border-base bg-surface rounded-xl shadow-2xs space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="w-10 h-10 rounded-full bg-success/10 text-success flex items-center justify-center font-bold">
+                <CheckCircle2 className="h-5 w-5" />
+              </div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
+                Success Rate (200 OK)
+              </span>
+            </div>
+            <div>
+              <span className="font-heading text-3xl font-extrabold text-text-primary">
+                {analytics ? `${analytics.successRate}%` : "—"}
+              </span>
+              <p className="text-[11px] text-success font-semibold mt-0.5">Healthy execution ratio</p>
+            </div>
+          </Card>
+        </motion.div>
+
+        <motion.div whileHover={{ y: -2 }} transition={{ duration: 0.2 }}>
+          <Card className="p-5 border border-border-base bg-surface rounded-xl shadow-2xs space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="w-10 h-10 rounded-full bg-info/10 text-info flex items-center justify-center font-bold">
+                <Gauge className="h-5 w-5" />
+              </div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
+                Latency Spectrum
+              </span>
+            </div>
+            <div>
+              <div className="flex items-baseline gap-1">
+                <span className="font-heading text-3xl font-extrabold text-text-primary">
+                  {analytics ? `${analytics.avgResponseTimeMs}` : "—"}
+                </span>
+                <span className="text-xs font-mono text-text-tertiary">ms avg</span>
+              </div>
+              <p className="text-[11px] text-info font-semibold mt-0.5">
+                Max: {analytics?.maxResponseTimeMs || 0} ms · Min: {analytics?.minResponseTimeMs || 0} ms
+              </p>
+            </div>
+          </Card>
+        </motion.div>
+
+        <motion.div whileHover={{ y: -2 }} transition={{ duration: 0.2 }}>
+          <Card className="p-5 border border-border-base bg-surface rounded-xl shadow-2xs space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="w-10 h-10 rounded-full bg-error/10 text-error flex items-center justify-center font-bold">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
+                Exceptions (4xx / 5xx)
+              </span>
+            </div>
+            <div>
+              <span className="font-heading text-3xl font-extrabold text-text-primary">
+                {analytics ? analytics.errorRequests.toLocaleString() : "—"}
+              </span>
+              <p className="text-[11px] text-error font-semibold mt-0.5">
+                4xx: {analytics?.clientErrorRequests || 0} · 5xx: {analytics?.serverErrorRequests || 0}
+              </p>
+            </div>
+          </Card>
+        </motion.div>
+      </motion.div>
+
+      {/* Advanced Telemetry Insights Grid */}
       {analytics && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Top Slow Endpoints */}
+        <motion.div variants={cardVariants} className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Card className="p-4 border border-border-base bg-surface rounded-xl shadow-2xs space-y-3">
             <h3 className="font-bold text-xs font-heading text-text-primary uppercase tracking-wider border-b border-border-base pb-2 flex items-center justify-between">
               <span>Top Slowest Endpoints (Avg Latency)</span>
@@ -301,7 +333,6 @@ export default function RequestsPage() {
             </div>
           </Card>
 
-          {/* Method & IP Telemetry */}
           <Card className="p-4 border border-border-base bg-surface rounded-xl shadow-2xs space-y-3">
             <h3 className="font-bold text-xs font-heading text-text-primary uppercase tracking-wider border-b border-border-base pb-2 flex items-center justify-between">
               <span>Top Active Client IPs</span>
@@ -326,174 +357,173 @@ export default function RequestsPage() {
               )}
             </div>
           </Card>
-        </div>
+        </motion.div>
       )}
 
       {/* Main Request Stream Table */}
-      <Card className="border border-border-base bg-surface rounded-xl shadow-2xs overflow-hidden flex flex-col flex-1">
-        {/* Filters Bar */}
-        <div className="p-4 border-b border-border-base flex flex-wrap items-center justify-between gap-3 bg-surface-subtle/20">
-          <div className="flex items-center gap-2 flex-1 max-w-md">
-            <div className="relative w-full">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-tertiary" />
-              <input
-                className="w-full h-8 pl-8 pr-3 bg-surface border border-border-base rounded-md text-xs focus:border-brand focus:outline-none"
-                placeholder="Search endpoint URL path..."
-                value={searchUrl}
-                onChange={(e) => setSearchUrl(e.target.value)}
-              />
+      <motion.div variants={cardVariants} className="flex-1">
+        <Card className="border border-border-base bg-surface rounded-xl shadow-2xs overflow-hidden flex flex-col flex-1">
+          {/* Filters Bar */}
+          <div className="p-4 border-b border-border-base flex flex-wrap items-center justify-between gap-3 bg-surface-subtle/20">
+            <div className="flex items-center gap-2 flex-1 max-w-md">
+              <div className="relative w-full">
+                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-tertiary" />
+                <input
+                  className="w-full h-8 pl-8 pr-3 bg-surface border border-border-base rounded-md text-xs focus:border-brand focus:outline-none"
+                  placeholder="Search endpoint URL path..."
+                  value={searchUrl}
+                  onChange={(e) => setSearchUrl(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <select
+                className="h-8 rounded-md border border-border-base bg-surface px-2 text-xs font-medium text-text-primary focus:border-brand focus:outline-none"
+                value={methodFilter}
+                onChange={(e) => {
+                  setPage(1);
+                  setMethodFilter(e.target.value);
+                }}
+              >
+                <option value="ALL">All Methods</option>
+                <option value="GET">GET</option>
+                <option value="POST">POST</option>
+                <option value="PUT">PUT / PATCH</option>
+                <option value="DELETE">DELETE</option>
+              </select>
+
+              <select
+                className="h-8 rounded-md border border-border-base bg-surface px-2 text-xs font-medium text-text-primary focus:border-brand focus:outline-none"
+                value={statusFilter}
+                onChange={(e) => {
+                  setPage(1);
+                  setStatusFilter(e.target.value);
+                }}
+              >
+                <option value="ALL">All Statuses</option>
+                <option value="CLIENT_ERRORS">4xx Client Errors</option>
+                <option value="ERRORS">5xx Server Errors</option>
+              </select>
+
+              <select
+                className="h-8 rounded-md border border-border-base bg-surface px-2 text-xs font-medium text-text-primary focus:border-brand focus:outline-none"
+                value={limit}
+                onChange={(e) => {
+                  setPage(1);
+                  setLimit(Number(e.target.value));
+                }}
+              >
+                <option value={20}>20 / page</option>
+                <option value={50}>50 / page</option>
+                <option value={100}>100 / page</option>
+              </select>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* Method Filter */}
-            <select
-              className="h-8 rounded-md border border-border-base bg-surface px-2 text-xs font-medium text-text-primary focus:border-brand focus:outline-none"
-              value={methodFilter}
-              onChange={(e) => {
-                setPage(1);
-                setMethodFilter(e.target.value);
-              }}
-            >
-              <option value="ALL">All Methods</option>
-              <option value="GET">GET</option>
-              <option value="POST">POST</option>
-              <option value="PUT">PUT / PATCH</option>
-              <option value="DELETE">DELETE</option>
-            </select>
-
-            {/* Status Filter */}
-            <select
-              className="h-8 rounded-md border border-border-base bg-surface px-2 text-xs font-medium text-text-primary focus:border-brand focus:outline-none"
-              value={statusFilter}
-              onChange={(e) => {
-                setPage(1);
-                setStatusFilter(e.target.value);
-              }}
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="CLIENT_ERRORS">4xx Client Errors</option>
-              <option value="ERRORS">5xx Server Errors</option>
-            </select>
-
-            {/* Page Size */}
-            <select
-              className="h-8 rounded-md border border-border-base bg-surface px-2 text-xs font-medium text-text-primary focus:border-brand focus:outline-none"
-              value={limit}
-              onChange={(e) => {
-                setPage(1);
-                setLimit(Number(e.target.value));
-              }}
-            >
-              <option value={20}>20 / page</option>
-              <option value={50}>50 / page</option>
-              <option value={100}>100 / page</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Requests Table */}
-        <div className="overflow-x-auto flex-1">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-surface-subtle/40 border-b border-border-base text-[11px] font-bold text-text-tertiary uppercase tracking-wider">
-                <th className="py-3 px-6">Method</th>
-                <th className="py-3 px-6">Endpoint URL</th>
-                <th className="py-3 px-6">Status Code</th>
-                <th className="py-3 px-6">Latency</th>
-                <th className="py-3 px-6">IP Address</th>
-                <th className="py-3 px-6">Timestamp</th>
-                <th className="py-3 px-6 text-right">Kanban Drawer</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border-base/50 text-xs">
-              {loading ? (
-                <tr>
-                  <td colSpan={7} className="py-8 text-center text-text-tertiary">
-                    Loading telemetry request stream...
-                  </td>
+          {/* Requests Table */}
+          <div className="overflow-x-auto flex-1">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-surface-subtle/40 border-b border-border-base text-[11px] font-bold text-text-tertiary uppercase tracking-wider">
+                  <th className="py-3 px-6">Method</th>
+                  <th className="py-3 px-6">Endpoint URL</th>
+                  <th className="py-3 px-6">Status Code</th>
+                  <th className="py-3 px-6">Latency</th>
+                  <th className="py-3 px-6">IP Address</th>
+                  <th className="py-3 px-6">Timestamp</th>
+                  <th className="py-3 px-6 text-right">Kanban Drawer</th>
                 </tr>
-              ) : filteredLogs.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="py-8 text-center text-text-tertiary">
-                    No matching HTTP request logs found.
-                  </td>
-                </tr>
-              ) : (
-                filteredLogs.map((l) => (
-                  <tr key={l.id} className="hover:bg-surface-subtle/30 transition-colors group">
-                    <td className="py-3 px-6">
-                      <Badge variant="outline" className={cn("text-[10px] px-2 py-0.5 font-bold uppercase", getMethodBadge(l.method))}>
-                        {l.method}
-                      </Badge>
-                    </td>
-
-                    <td className="py-3 px-6 font-mono text-text-primary max-w-[280px] truncate text-[11px]" title={l.url}>
-                      {l.url}
-                    </td>
-
-                    <td className="py-3 px-6">
-                      <Badge variant="outline" className={cn("text-[10px] px-2 py-0.5 font-bold font-mono", getStatusBadge(l.statusCode))}>
-                        {l.statusCode}
-                      </Badge>
-                    </td>
-
-                    <td className="py-3 px-6 font-mono text-text-tertiary text-xs">
-                      {l.responseTime.toFixed(1)} ms
-                    </td>
-
-                    <td className="py-3 px-6 font-mono text-[11px] text-text-tertiary">
-                      {l.ipAddress || "127.0.0.1"}
-                    </td>
-
-                    <td className="py-3 px-6 font-mono text-[11px] text-text-tertiary">
-                      {new Date(l.createdAt).toLocaleTimeString()}
-                    </td>
-
-                    <td className="py-3 px-6 text-right">
-                      <Button
-                        size="xs"
-                        variant="outline"
-                        onClick={() => handleInspect(l)}
-                        className="text-[10px] h-7 gap-1 border-brand/30 text-brand hover:bg-brand/10"
-                      >
-                        Inspect Kanban <ArrowUpRight className="h-3 w-3" />
-                      </Button>
+              </thead>
+              <tbody className="divide-y divide-border-base/50 text-xs">
+                {loading ? (
+                  <tr>
+                    <td colSpan={7} className="py-8 text-center text-text-tertiary">
+                      Loading telemetry request stream...
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                ) : filteredLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-8 text-center text-text-tertiary">
+                      No matching HTTP request logs found.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredLogs.map((l) => (
+                    <tr key={l.id} className="hover:bg-surface-subtle/30 transition-colors group">
+                      <td className="py-3 px-6">
+                        <Badge variant="outline" className={cn("text-[10px] px-2 py-0.5 font-bold uppercase", getMethodBadge(l.method))}>
+                          {l.method}
+                        </Badge>
+                      </td>
 
-        {/* Pagination Footer */}
-        {totalPages > 1 && (
-          <div className="p-4 border-t border-border-base flex items-center justify-between text-xs text-text-tertiary bg-surface-subtle/20">
-            <span>
-              Page {page} of {totalPages} · Total {total} request logs
-            </span>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                Previous
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Next
-              </Button>
-            </div>
+                      <td className="py-3 px-6 font-mono text-text-primary max-w-[280px] truncate text-[11px]" title={l.url}>
+                        {l.url}
+                      </td>
+
+                      <td className="py-3 px-6">
+                        <Badge variant="outline" className={cn("text-[10px] px-2 py-0.5 font-bold font-mono", getStatusBadge(l.statusCode))}>
+                          {l.statusCode}
+                        </Badge>
+                      </td>
+
+                      <td className="py-3 px-6 font-mono text-text-tertiary text-xs">
+                        {l.responseTime.toFixed(1)} ms
+                      </td>
+
+                      <td className="py-3 px-6 font-mono text-[11px] text-text-tertiary">
+                        {l.ipAddress || "127.0.0.1"}
+                      </td>
+
+                      <td className="py-3 px-6 font-mono text-[11px] text-text-tertiary">
+                        {new Date(l.createdAt).toLocaleTimeString()}
+                      </td>
+
+                      <td className="py-3 px-6 text-right">
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          onClick={() => handleInspect(l)}
+                          className="text-[10px] h-7 gap-1 border-brand/30 text-brand hover:bg-brand/10 cursor-pointer"
+                        >
+                          Inspect Kanban <ArrowUpRight className="h-3 w-3" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
-        )}
-      </Card>
+
+          {/* Pagination Footer */}
+          {totalPages > 1 && (
+            <div className="p-4 border-t border-border-base flex items-center justify-between text-xs text-text-tertiary bg-surface-subtle/20">
+              <span>
+                Page {page} of {totalPages} · Total {total} request logs
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
+        </Card>
+      </motion.div>
 
       {/* Slide-over Kanban Drawer for Inspecting Request Log */}
       <Sheet open={Boolean(inspectingLog)} onOpenChange={(open) => !open && setInspectingLog(null)}>
@@ -605,6 +635,6 @@ export default function RequestsPage() {
           </SheetContent>
         )}
       </Sheet>
-    </div>
+    </motion.div>
   );
 }
