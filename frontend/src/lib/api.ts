@@ -1556,14 +1556,98 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ subscription }),
     }),
+
+  // ---- WFH (Work From Home) ----
+  applyWFH: (payload: { startDate: string; endDate: string; days?: number; reason: string; attachmentUrl?: string | null }) =>
+    request<ItemResponse<WFHRequest>>("/api/v1/wfh", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  listMyWFH: (page = 1, pageSize = 20, status?: string) =>
+    request<ListResponse<WFHRequest>>(`/api/v1/wfh/my${qs({ page, pageSize, status })}`),
+
+  listWFHApprovals: (opts: { status?: string; search?: string; departmentId?: string } = {}) =>
+    request<ItemResponse<WFHRequest[]>>(`/api/v1/wfh/approvals${qs(opts)}`),
+
+  approveWFH: (id: string, comment?: string) =>
+    request<ItemResponse<WFHRequest>>(`/api/v1/wfh/${id}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ comment }),
+    }),
+
+  rejectWFH: (id: string, reason: string) =>
+    request<ItemResponse<WFHRequest>>(`/api/v1/wfh/${id}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
+
+  cancelWFH: (id: string) =>
+    request<ItemResponse<WFHRequest>>(`/api/v1/wfh/${id}/cancel`, {
+      method: "POST",
+    }),
+
+  getWFHLogs: (id: string) =>
+    request<ItemResponse<ApprovalLogItem[]>>(`/api/v1/wfh/${id}/logs`),
 };
+
+export interface WFHRequest {
+  id: string;
+  userId: string;
+  startDate: string;
+  endDate: string;
+  days: number;
+  reason: string;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+  attachmentUrl?: string | null;
+  approvedById?: string | null;
+  approvedAt?: string | null;
+  rejectionReason?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  user?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    avatarUrl?: string | null;
+    designation?: string | null;
+    department?: { id: string; name: string; code: string } | null;
+    role?: { id: string; name: string; displayName: string } | null;
+  };
+  approvedBy?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  } | null;
+}
+
+export interface ApprovalLogItem {
+  id: string;
+  module: "WFH" | "LEAVE" | "TIMESHEET";
+  referenceId: string;
+  action: "SUBMITTED" | "APPROVED" | "REJECTED" | "CANCELLED";
+  performedById: string;
+  comment?: string | null;
+  createdAt: string;
+  performedBy: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    avatarUrl?: string | null;
+    designation?: string | null;
+    role?: { name: string; displayName: string } | null;
+  };
+}
 
 export interface NotificationItem {
   id: string;
   userId: string;
   title: string;
   message: string;
-  type: "leave" | "timesheet" | "project" | "task" | "attendance" | "user" | "support" | "system" | string;
+  type: "leave" | "timesheet" | "project" | "task" | "attendance" | "user" | "support" | "system" | "wfh" | string;
   referenceId?: string | null;
   link?: string | null;
   isRead: boolean;

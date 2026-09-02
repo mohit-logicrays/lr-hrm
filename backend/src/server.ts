@@ -25,6 +25,7 @@ import policyRoutes from "./modules/policies/policy.routes";
 import supportRoutes from "./modules/support/support.routes";
 import profileRoutes from "./modules/profile/profile.routes";
 import notificationRoutes from "./modules/notifications/notification.routes";
+import wfhRoutes from "./modules/wfh/wfh.routes";
 
 import uploadRoutes from "./modules/upload/upload.routes";
 import path from "path";
@@ -60,6 +61,7 @@ app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/users", userRoutes);
 app.use("/api/v1/profile", profileRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
+app.use("/api/v1/wfh", wfhRoutes);
 app.use("/api/v1/upload", uploadRoutes);
 app.use("/api/v1/roles", roleRoutes);
 app.use("/api/v1/departments", departmentRoutes);

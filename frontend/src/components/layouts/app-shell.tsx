@@ -38,10 +38,14 @@ const PAGE_TITLES: Record<string, string> = {
   "/teams": "Teams",
   "/projects": "Projects",
   "/leave": "Leave Management",
+  "/wfh": "Work From Home",
+  "/wfh/approvals": "WFH Approvals",
   "/time": "Time & Attendance",
   "/holidays": "Holidays",
   "/requests": "Requests",
   "/profile": "Settings & Profile",
+  "/notifications": "Notification Center",
+  "/notifications/preferences": "Notification Preferences",
 };
 
 /**

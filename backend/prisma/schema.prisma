@@ -237,6 +237,9 @@ model User {
   notifications       Notification[]
   notificationPreference NotificationPreference?
   activeTimer         ActiveTimer?
+  wfhRequests         WFHRequest[]           @relation("UserWFHRequests")
+  approvedWfhRequests WFHRequest[]           @relation("ApprovedWFHRequests")
+  approvalLogs        ApprovalLog[]
 
   @@index([roleId])
   @@index([departmentId])
@@ -861,4 +864,65 @@ model NotificationPreference {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
+
+// ---------- Unified Approval Architecture & WFH ----------
+enum WFHStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum ApprovalModule {
+  WFH
+  LEAVE
+  TIMESHEET
+}
+
+enum ApprovalAction {
+  SUBMITTED
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model WFHRequest {
+  id              String    @id @default(cuid())
+  userId          String
+  startDate       DateTime
+  endDate         DateTime
+  days            Float     @default(1)
+  reason          String
+  status          WFHStatus @default(PENDING)
+  attachmentUrl   String?
+  approvedById    String?
+  approvedAt      DateTime?
+  rejectionReason String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user       User  @relation("UserWFHRequests", fields: [userId], references: [id], onDelete: Cascade)
+  approvedBy User? @relation("ApprovedWFHRequests", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([status])
+  @@index([startDate, endDate])
+}
+
+model ApprovalLog {
+  id            String         @id @default(cuid())
+  module        ApprovalModule
+  referenceId   String         // wfhRequestId, leaveRequestId, or timeLogId
+  action        ApprovalAction
+  performedById String
+  comment       String?
+  createdAt     DateTime       @default(now())
+
+  performedBy User @relation(fields: [performedById], references: [id], onDelete: Cascade)
+
+  @@index([module, referenceId])
+  @@index([performedById])
+  @@index([createdAt])
+}
+
 

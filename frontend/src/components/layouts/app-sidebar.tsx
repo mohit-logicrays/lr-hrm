@@ -34,6 +34,8 @@ import {
   Megaphone,
   ScrollText,
   LifeBuoy,
+  Home,
+  CheckSquare,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -80,6 +82,8 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Projects", href: "/projects", icon: FolderKanban, resource: "project" },
       { label: "Leave", href: "/leave", icon: CalendarDays, resource: "leave" },
+      { label: "Work From Home", href: "/wfh", icon: Home },
+      { label: "WFH Approvals", href: "/wfh/approvals", icon: CheckSquare },
       { label: "Holidays", href: "/holidays", icon: CalendarOff, resource: "holiday" },
       { label: "Time Logs", href: "/time", icon: Clock, resource: "time" },
     ],
@@ -246,6 +250,13 @@ function NavButton({
   // Roles module MUST be visible ONLY to Superadmin and Special Group (Founder, CEO, CTO, etc.)
   if (item.href === "/roles" && !hasSpecialAccess) {
     return null;
+  }
+
+  // WFH Approvals visible to TL, PM, HR, Superadmin, Special Group
+  if (item.href === "/wfh/approvals") {
+    const roleLower = (role || "").toLowerCase();
+    const canApprove = hasSpecialAccess || ["hr", "manager", "lead", "superadmin"].includes(roleLower);
+    if (!canApprove) return null;
   }
 
   const perms = usePermission(item.resource ?? "");
