@@ -210,6 +210,12 @@ model User {
   leaveBalances       LeaveBalance[]
   leaveRequests       LeaveRequest[]
   refreshTokens       RefreshToken[]
+  announcements       Announcement[]
+  policies            CompanyPolicy[]
+  policyAcknowledgments PolicyAcknowledgment[]
+  createdTickets      SupportTicket[]        @relation("CreatedTickets")
+  assignedTickets     SupportTicket[]        @relation("AssignedTickets")
+  ticketComments      TicketComment[]
 
   @@index([roleId])
   @@index([departmentId])
@@ -648,4 +654,148 @@ model RequestLog {
   @@index([userId])
   @@index([statusCode])
   @@index([ipAddress])
+}
+
+// ---------- Announcements ----------
+enum AnnouncementCategory {
+  GENERAL
+  HR
+  EVENTS
+  IT_INFRA
+  URGENT
+}
+
+enum AnnouncementStatus {
+  ACTIVE
+  EXPIRED
+  DRAFT
+}
+
+model Announcement {
+  id          String               @id @default(cuid())
+  title       String
+  content     String
+  category    AnnouncementCategory @default(GENERAL)
+  priority    String               @default("NORMAL")
+  isPinned    Boolean              @default(false)
+  status      AnnouncementStatus   @default(ACTIVE)
+  publishDate DateTime             @default(now())
+  expiryDate  DateTime?
+  authorId    String
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([category])
+  @@index([authorId])
+}
+
+// ---------- Company Policies ----------
+enum PolicyCategory {
+  HR
+  IT
+  FINANCE
+  SECURITY
+  GENERAL
+}
+
+model CompanyPolicy {
+  id            String         @id @default(cuid())
+  title         String
+  code          String?
+  category      PolicyCategory @default(GENERAL)
+  version       String         @default("1.0")
+  content       String
+  fileUrl       String?
+  isMandatory   Boolean        @default(false)
+  effectiveDate DateTime       @default(now())
+  authorId      String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  author          User                 @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  acknowledgments PolicyAcknowledgment[]
+
+  @@index([category])
+  @@index([authorId])
+}
+
+model PolicyAcknowledgment {
+  id             String   @id @default(cuid())
+  policyId       String
+  userId         String
+  acknowledgedAt DateTime @default(now())
+
+  policy CompanyPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  user   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([policyId, userId])
+}
+
+// ---------- Support Tickets ----------
+enum TicketCategory {
+  IT_HARDWARE
+  IT_SOFTWARE
+  HR_QUERY
+  PAYROLL
+  ACCESS_REQUEST
+  GENERAL
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+model SupportTicket {
+  id           String         @id @default(cuid())
+  ticketNumber Int            @default(autoincrement())
+  subject      String
+  category     TicketCategory @default(GENERAL)
+  priority     TicketPriority @default(MEDIUM)
+  status       TicketStatus   @default(OPEN)
+  description  String
+  attachments  Json?
+  creatorId    String
+  assigneeId   String?
+  resolvedAt   DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  creator  User            @relation("CreatedTickets", fields: [creatorId], references: [id], onDelete: Cascade)
+  assignee User?           @relation("AssignedTickets", fields: [assigneeId], references: [id], onDelete: SetNull)
+  comments TicketComment[]
+
+  @@index([creatorId])
+  @@index([assigneeId])
+  @@index([status])
+  @@index([category])
+}
+
+model TicketComment {
+  id             String   @id @default(cuid())
+  ticketId       String
+  authorId       String
+  content        String
+  attachments    Json?
+  isInternalNote Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([authorId])
 }

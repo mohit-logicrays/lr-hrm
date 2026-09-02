@@ -31,6 +31,9 @@ import {
   MoreVertical,
   LogOut,
   User as UserIcon,
+  Megaphone,
+  ScrollText,
+  LifeBuoy,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -68,6 +71,8 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Teams", href: "/teams", icon: UsersRound, resource: "team" },
       { label: "Departments", href: "/departments", icon: Building2, resource: "department" },
       { label: "Roles", href: "/roles", icon: Shield, resource: "role" },
+      { label: "Announcements", href: "/announcements", icon: Megaphone },
+      { label: "Policies", href: "/policies", icon: ScrollText },
     ],
   },
   {
@@ -82,6 +87,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     title: "System & Admin",
     items: [
+      { label: "Support", href: "/support", icon: LifeBuoy },
       { label: "Requests", href: "/requests", icon: ListChecks, resource: "request" },
       { label: "Settings", href: "/profile", icon: Settings },
     ],

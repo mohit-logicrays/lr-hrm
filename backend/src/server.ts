@@ -20,33 +20,28 @@ import timeRoutes from "./modules/time/time.routes";
 import leaveRoutes from "./modules/leave/leave.routes";
 import holidayRoutes from "./modules/holidays/holiday.routes";
 import requestRoutes from "./modules/requests/request.routes";
+import announcementRoutes from "./modules/announcements/announcement.routes";
+import policyRoutes from "./modules/policies/policy.routes";
+import supportRoutes from "./modules/support/support.routes";
 
 import uploadRoutes from "./modules/upload/upload.routes";
 import path from "path";
 
 const app = express();
 
+app.use(helmet());
 app.use(
   cors({
     origin: config.clientUrl,
     credentials: true,
   })
 );
-app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
-app.use(express.json({ limit: "5mb" }));
 app.use(cookieParser());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
-// Request logging (sanitized, async)
 app.use(requestLogger);
-
-app.get("/success", (_req, res) => {
-  res.json({
-    success: true,
-    message: "HRM server is running",
-    timestamp: new Date().toISOString(),
-  });
-});
 
 app.get("/api/health", (_req, res) => {
   res.json({
@@ -70,6 +65,9 @@ app.use("/api/v1/time", timeRoutes);
 app.use("/api/v1/leave", leaveRoutes);
 app.use("/api/v1/holidays", holidayRoutes);
 app.use("/api/v1/requests", requestRoutes);
+app.use("/api/v1/announcements", announcementRoutes);
+app.use("/api/v1/policies", policyRoutes);
+app.use("/api/v1/support", supportRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

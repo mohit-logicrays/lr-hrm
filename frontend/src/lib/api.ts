@@ -520,6 +520,109 @@ export interface Holiday {
   updatedAt?: string;
 }
 
+// ---------- Announcements ----------
+export type AnnouncementCategory = "GENERAL" | "HR" | "EVENTS" | "IT_INFRA" | "URGENT";
+export type AnnouncementStatus = "ACTIVE" | "EXPIRED" | "DRAFT";
+
+export interface Announcement {
+  id: string;
+  title: string;
+  content: string;
+  category: AnnouncementCategory;
+  priority: "NORMAL" | "HIGH" | "URGENT";
+  isPinned: boolean;
+  status: AnnouncementStatus;
+  publishDate: string;
+  expiryDate?: string | null;
+  authorId: string;
+  createdAt: string;
+  updatedAt: string;
+  author?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    department?: { id: string; name: string } | null;
+  };
+}
+
+// ---------- Company Policies ----------
+export type PolicyCategory = "HR" | "IT" | "FINANCE" | "SECURITY" | "GENERAL";
+
+export interface CompanyPolicy {
+  id: string;
+  title: string;
+  code?: string | null;
+  category: PolicyCategory;
+  version: string;
+  content: string;
+  fileUrl?: string | null;
+  isMandatory: boolean;
+  effectiveDate: string;
+  authorId: string;
+  isAcknowledged?: boolean;
+  createdAt: string;
+  updatedAt: string;
+  author?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    department?: { id: string; name: string } | null;
+  };
+  _count?: { acknowledgments: number };
+}
+
+// ---------- Support Tickets ----------
+export type TicketCategory = "IT_HARDWARE" | "IT_SOFTWARE" | "HR_QUERY" | "PAYROLL" | "ACCESS_REQUEST" | "GENERAL";
+export type TicketPriority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+export type TicketStatus = "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED";
+
+export interface SupportTicket {
+  id: string;
+  ticketNumber: number;
+  subject: string;
+  category: TicketCategory;
+  priority: TicketPriority;
+  status: TicketStatus;
+  description: string;
+  attachments?: any;
+  creatorId: string;
+  assigneeId?: string | null;
+  resolvedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  creator?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    avatarUrl?: string | null;
+    department?: { id: string; name: string } | null;
+  };
+  assignee?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    avatarUrl?: string | null;
+  } | null;
+  comments?: Array<{
+    id: string;
+    content: string;
+    isInternalNote: boolean;
+    createdAt: string;
+    author: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      email: string;
+      avatarUrl?: string | null;
+    };
+  }>;
+  _count?: { comments: number };
+}
+
 // ---------- Requests / Analytics ----------
 
 export interface RequestLog {
@@ -1241,6 +1344,81 @@ export const api = {
 
   requestAnalytics: () =>
     request<ItemResponse<RequestAnalytics>>("/api/v1/requests/analytics"),
+
+  // ---- Announcements ----
+  listAnnouncements: (page = 1, pageSize = 20, opts: { search?: string; category?: AnnouncementCategory; status?: AnnouncementStatus } = {}) =>
+    request<ListResponse<Announcement>>(`/api/v1/announcements${qs({ page, pageSize, ...opts })}`),
+
+  getAnnouncement: (id: string) =>
+    request<ItemResponse<Announcement>>(`/api/v1/announcements/${id}`),
+
+  createAnnouncement: (payload: { title: string; content: string; category?: AnnouncementCategory; priority?: "NORMAL" | "HIGH" | "URGENT"; isPinned?: boolean; status?: AnnouncementStatus; expiryDate?: string | null }) =>
+    request<ItemResponse<Announcement>>("/api/v1/announcements", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateAnnouncement: (id: string, payload: Partial<{ title: string; content: string; category: AnnouncementCategory; priority: "NORMAL" | "HIGH" | "URGENT"; isPinned: boolean; status: AnnouncementStatus; expiryDate: string | null }>) =>
+    request<ItemResponse<Announcement>>(`/api/v1/announcements/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteAnnouncement: (id: string) =>
+    request<void>(`/api/v1/announcements/${id}`, { method: "DELETE" }),
+
+  // ---- Company Policies ----
+  listPolicies: (page = 1, pageSize = 20, opts: { search?: string; category?: PolicyCategory } = {}) =>
+    request<ListResponse<CompanyPolicy>>(`/api/v1/policies${qs({ page, pageSize, ...opts })}`),
+
+  getPolicy: (id: string) =>
+    request<ItemResponse<CompanyPolicy>>(`/api/v1/policies/${id}`),
+
+  createPolicy: (payload: { title: string; code?: string | null; category?: PolicyCategory; version?: string; content: string; fileUrl?: string | null; isMandatory?: boolean }) =>
+    request<ItemResponse<CompanyPolicy>>("/api/v1/policies", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updatePolicy: (id: string, payload: Partial<{ title: string; code: string | null; category: PolicyCategory; version: string; content: string; fileUrl: string | null; isMandatory: boolean }>) =>
+    request<ItemResponse<CompanyPolicy>>(`/api/v1/policies/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  acknowledgePolicy: (id: string) =>
+    request<void>(`/api/v1/policies/${id}/acknowledge`, { method: "POST" }),
+
+  deletePolicy: (id: string) =>
+    request<void>(`/api/v1/policies/${id}`, { method: "DELETE" }),
+
+  // ---- Support Tickets ----
+  listSupportTickets: (page = 1, pageSize = 20, opts: { search?: string; category?: TicketCategory; priority?: TicketPriority; status?: TicketStatus; scope?: "my" | "admin" } = {}) =>
+    request<ListResponse<SupportTicket>>(`/api/v1/support${qs({ page, pageSize, ...opts })}`),
+
+  getSupportTicket: (id: string) =>
+    request<ItemResponse<SupportTicket>>(`/api/v1/support/${id}`),
+
+  createSupportTicket: (payload: { subject: string; category: TicketCategory; priority: TicketPriority; description: string }) =>
+    request<ItemResponse<SupportTicket>>("/api/v1/support", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateSupportTicket: (id: string, payload: Partial<{ subject: string; category: TicketCategory; priority: TicketPriority; status: TicketStatus; assigneeId: string | null; description: string }>) =>
+    request<ItemResponse<SupportTicket>>(`/api/v1/support/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  addTicketComment: (id: string, payload: { content: string; isInternalNote?: boolean }) =>
+    request<ItemResponse<{ id: string; content: string; createdAt: string }>>(`/api/v1/support/${id}/comments`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteSupportTicket: (id: string) =>
+    request<void>(`/api/v1/support/${id}`, { method: "DELETE" }),
 };
 
 export { ApiError };
