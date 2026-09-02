@@ -1,9 +1,10 @@
 "use client";
 
+import { createElement } from "react";
 import { motion } from "framer-motion";
-import { Department } from "@/lib/api";
-import { Badge } from "@/components/ui/badge";
+import type { Department } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { RichTextViewer } from "@/components/ui/rich-text-editor";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,208 +17,185 @@ import {
   Building2,
   Code,
   Cpu,
-  Globe,
-  Layers,
   MoreVertical,
   Palette,
   Pencil,
   Server,
-  ShoppingBag,
   ShoppingCart,
   Terminal,
   Trash2,
-  Users,
+  UsersRound,
   CheckCircle2,
+  Layers,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface DepartmentCardProps {
   department: Department;
-  canUpdate: boolean;
-  canDelete: boolean;
+  index: number;
+  perms: { update: boolean; delete: boolean };
   onEdit: (d: Department) => void;
   onDelete: (d: Department) => void;
 }
 
-// Icon and theme mapping based on department code/name
-function getDepartmentTheme(name: string, code: string) {
+// Icon and color accent mapping matching TeamCard helpers
+function getDepartmentIconAndAccent(name: string, code: string, index: number) {
   const key = `${name} ${code}`.toLowerCase();
 
-  if (key.includes("py") || key.includes("python")) {
-    return {
-      icon: Code,
-      bg: "bg-blue-100 dark:bg-blue-950/40",
-      text: "text-blue-600 dark:text-blue-400",
-    };
-  }
-  if (key.includes("ai") || key.includes("ml") || key.includes("data")) {
-    return {
-      icon: Brain,
-      bg: "bg-purple-100 dark:bg-purple-950/40",
-      text: "text-purple-600 dark:text-purple-400",
-    };
-  }
-  if (key.includes("shop") || key.includes("ecom") || key.includes("cart")) {
-    return {
-      icon: ShoppingCart,
-      bg: "bg-orange-100 dark:bg-orange-950/40",
-      text: "text-orange-600 dark:text-orange-400",
-    };
-  }
-  if (key.includes("front") || key.includes("fe") || key.includes("react")) {
-    return {
-      icon: Terminal,
-      bg: "bg-cyan-100 dark:bg-cyan-950/40",
-      text: "text-cyan-600 dark:text-cyan-400",
-    };
-  }
-  if (key.includes("back") || key.includes("be") || key.includes("node")) {
-    return {
-      icon: Server,
-      bg: "bg-indigo-100 dark:bg-indigo-950/40",
-      text: "text-indigo-600 dark:text-indigo-400",
-    };
-  }
-  if (key.includes("devops") || key.includes("cloud") || key.includes("sys")) {
-    return {
-      icon: Cpu,
-      bg: "bg-red-100 dark:bg-red-950/40",
-      text: "text-red-600 dark:text-red-400",
-    };
-  }
-  if (key.includes("design") || key.includes("ui") || key.includes("ux")) {
-    return {
-      icon: Palette,
-      bg: "bg-pink-100 dark:bg-pink-950/40",
-      text: "text-pink-600 dark:text-pink-400",
-    };
-  }
-  if (key.includes("qa") || key.includes("test")) {
-    return {
-      icon: CheckCircle2,
-      bg: "bg-teal-100 dark:bg-teal-950/40",
-      text: "text-teal-600 dark:text-teal-400",
-    };
-  }
+  const accents = [
+    "bg-blue-500/10 text-blue-600 border-blue-500/20 dark:text-blue-400",
+    "bg-purple-500/10 text-purple-600 border-purple-500/20 dark:text-purple-400",
+    "bg-orange-500/10 text-orange-600 border-orange-500/20 dark:text-orange-400",
+    "bg-cyan-500/10 text-cyan-600 border-cyan-500/20 dark:text-cyan-400",
+    "bg-indigo-500/10 text-indigo-600 border-indigo-500/20 dark:text-indigo-400",
+    "bg-rose-500/10 text-rose-600 border-rose-500/20 dark:text-rose-400",
+    "bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:text-emerald-400",
+    "bg-amber-500/10 text-amber-600 border-amber-500/20 dark:text-amber-400",
+  ];
 
-  return {
-    icon: Building2,
-    bg: "bg-brand/10",
-    text: "text-brand",
-  };
+  const accentClass = accents[index % accents.length];
+
+  if (key.includes("py") || key.includes("python")) return { icon: Code, accentClass };
+  if (key.includes("ai") || key.includes("ml") || key.includes("data")) return { icon: Brain, accentClass };
+  if (key.includes("shop") || key.includes("ecom") || key.includes("cart")) return { icon: ShoppingCart, accentClass };
+  if (key.includes("front") || key.includes("fe") || key.includes("react")) return { icon: Terminal, accentClass };
+  if (key.includes("back") || key.includes("be") || key.includes("node")) return { icon: Server, accentClass };
+  if (key.includes("devops") || key.includes("cloud") || key.includes("sys")) return { icon: Cpu, accentClass };
+  if (key.includes("design") || key.includes("ui") || key.includes("ux")) return { icon: Palette, accentClass };
+  if (key.includes("qa") || key.includes("test")) return { icon: CheckCircle2, accentClass };
+
+  return { icon: Building2, accentClass };
 }
 
 export function DepartmentCard({
   department,
-  canUpdate,
-  canDelete,
+  index,
+  perms,
   onEdit,
   onDelete,
 }: DepartmentCardProps) {
-  const theme = getDepartmentTheme(department.name, department.code);
-  const IconComponent = theme.icon;
-
+  const { icon: IconComponent, accentClass } = getDepartmentIconAndAccent(department.name, department.code, index);
   const teamsCount = department._count?.teams ?? 0;
   const usersCount = department._count?.users ?? 0;
+  const isActive = usersCount > 0 || teamsCount > 0;
 
   return (
     <motion.div
-      layout
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -10 }}
-      whileHover={{ y: -4 }}
-      transition={{ duration: 0.2 }}
-      className="bg-surface rounded-xl p-5 border border-border-base shadow-2xs hover:shadow-md hover:border-brand/30 transition-all flex flex-col justify-between group relative"
+      exit={{ opacity: 0, y: -8 }}
+      whileHover={{ y: -3 }}
+      transition={{ duration: 0.15 }}
+      className="h-full"
     >
-      {/* Top Card Header */}
-      <div>
-        <div className="flex justify-between items-start mb-4">
-          <div className="flex items-center gap-3.5">
-            <div className={cn("w-12 h-12 rounded-lg flex items-center justify-center shrink-0", theme.bg, theme.text)}>
-              <IconComponent className="h-6 w-6" />
-            </div>
-
-            <div>
-              <div className="flex items-center gap-2 mb-0.5">
-                <h3 className="font-bold text-base text-text-primary font-heading line-clamp-1">
+      <div className="group relative overflow-hidden rounded-lg border border-border-base bg-surface p-3.5 transition-all duration-200 hover:border-brand/30 hover:shadow-xs flex flex-col justify-between h-full">
+        <div>
+          {/* Top Header */}
+          <div className="flex items-start justify-between gap-2 mb-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-md border", accentClass)}>
+                {createElement(IconComponent, { className: "h-4 w-4" })}
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="font-semibold text-text-primary transition-colors group-hover:text-brand font-heading text-sm line-clamp-1 leading-snug">
                   {department.name}
                 </h3>
-                <span className="bg-surface-subtle text-text-secondary text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded border border-border-base">
+                <p className="text-[11px] text-text-tertiary line-clamp-1 font-mono">
                   DPT-{department.code}
-                </span>
+                </p>
               </div>
-              <span className="inline-flex items-center gap-1 text-success bg-success/10 px-2 py-0.5 rounded-full font-semibold text-[10px] border border-success/20">
-                <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" /> Active
+            </div>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label="Department actions"
+                  className="text-text-tertiary hover:text-text-primary hover:bg-surface-subtle rounded-md h-6 w-6 shrink-0"
+                >
+                  <MoreVertical className="h-3.5 w-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-40">
+                {perms.update && (
+                  <DropdownMenuItem onClick={() => onEdit(department)} className="gap-1.5 text-xs cursor-pointer">
+                    <Pencil className="h-3.5 w-3.5 text-text-tertiary" /> Edit Department
+                  </DropdownMenuItem>
+                )}
+                {perms.delete && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => onDelete(department)}
+                      variant="destructive"
+                      className="gap-1.5 text-xs cursor-pointer"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> Delete Department
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          {/* Description */}
+          <div className="min-h-[2.5rem] mb-2.5">
+            <div className="line-clamp-3 overflow-hidden">
+              <RichTextViewer content={department.description} />
+            </div>
+            {department.description && department.description.length > 80 && (
+              <button
+                onClick={() => onEdit(department)}
+                className="mt-0.5 text-[10px] font-medium text-brand hover:underline inline-flex items-center gap-0.5 cursor-pointer"
+              >
+                See full description &rarr;
+              </button>
+            )}
+          </div>
+
+          {/* Status & Counts Bar */}
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 px-2 py-0.5 rounded-xs text-[11px] font-medium border",
+                isActive
+                  ? "bg-success/10 text-success border-success/20"
+                  : "bg-surface-subtle text-text-tertiary border-border-base"
+              )}
+            >
+              <span className={cn("h-1.5 w-1.5 rounded-full", isActive ? "bg-success" : "bg-text-tertiary")} />
+              {isActive ? "Active" : "Inactive"}
+            </span>
+
+            <div className="flex items-center gap-3 text-xs text-text-secondary">
+              <span className="flex items-center gap-1">
+                <Layers className="h-3.5 w-3.5 text-text-tertiary" />
+                {teamsCount} {teamsCount === 1 ? "Team" : "Teams"}
+              </span>
+              <span className="flex items-center gap-1">
+                <UsersRound className="h-3.5 w-3.5 text-text-tertiary" />
+                {usersCount} {usersCount === 1 ? "Member" : "Members"}
               </span>
             </div>
           </div>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="h-7 w-7 text-text-tertiary hover:text-text-primary opacity-80 group-hover:opacity-100"
-              >
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-40 text-xs">
-              {canUpdate && (
-                <DropdownMenuItem onClick={() => onEdit(department)}>
-                  <Pencil className="h-3.5 w-3.5 mr-2" /> Edit Details
-                </DropdownMenuItem>
-              )}
-              {canDelete && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => onDelete(department)}
-                    className="text-error focus:text-error"
-                  >
-                    <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete Department
-                  </DropdownMenuItem>
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
 
-        {department.description && (
-          <p className="text-xs text-text-tertiary line-clamp-2 mb-4 leading-relaxed">
-            {department.description}
-          </p>
-        )}
-      </div>
+        {/* Card Footer */}
+        <div className="pt-2.5 border-t border-border-base flex items-center justify-between">
+          <div className="flex items-center gap-1 text-xs text-text-secondary font-medium font-mono">
+            <Building2 className="h-3.5 w-3.5 text-text-tertiary" />
+            {department.code}
+          </div>
 
-      {/* Bottom Footer Details */}
-      <div className="flex justify-between items-end pt-4 border-t border-border-base/50 mt-auto">
-        <div className="flex gap-8">
-          <div className="flex flex-col">
-            <span className="text-[10px] font-normal text-text-tertiary mb-0.5">Teams</span>
-            <span className="font-bold text-sm text-text-primary font-heading">{teamsCount}</span>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-[10px] font-normal text-text-tertiary mb-0.5">Employees</span>
-            <span className="font-bold text-sm text-text-primary font-heading">{usersCount}</span>
-          </div>
-        </div>
-
-        {/* User Avatars Preview */}
-        <div className="flex items-center -space-x-2">
-          <div className="w-6 h-6 rounded-full bg-brand/10 text-brand border-2 border-surface flex items-center justify-center text-[9px] font-mono font-bold">
-            LR
-          </div>
-          <div className="w-6 h-6 rounded-full bg-surface-subtle text-text-primary border-2 border-surface flex items-center justify-center text-[9px] font-mono font-bold">
-            FE
-          </div>
-          <div className="w-6 h-6 rounded-full bg-surface-subtle text-text-primary border-2 border-surface flex items-center justify-center text-[9px] font-mono font-bold">
-            BE
-          </div>
-          <span className="text-[10px] font-bold font-mono text-text-tertiary pl-3">
-            +{usersCount > 3 ? usersCount - 3 : usersCount}
-          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onEdit(department)}
+            className="text-xs h-6 px-2 text-brand hover:text-brand-hover hover:bg-brand-soft gap-1 font-medium"
+          >
+            Manage Department &rarr;
+          </Button>
         </div>
       </div>
     </motion.div>

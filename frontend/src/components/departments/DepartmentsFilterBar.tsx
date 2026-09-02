@@ -1,20 +1,21 @@
 "use client";
 
-import { Card } from "@/components/ui/card";
+import { motion } from "framer-motion";
+import { ArrowUpDown, LayoutGrid, List, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { ArrowUpDown, Grid, List, Search } from "lucide-react";
 
 interface DepartmentsFilterBarProps {
   search: string;
-  onSearchChange: (val: string) => void;
+  onSearchChange: (v: string) => void;
   statusFilter: string;
-  onStatusFilterChange: (val: string) => void;
+  onStatusFilterChange: (v: string) => void;
   sortOrder: "asc" | "desc";
   onToggleSort: () => void;
   viewMode: "grid" | "table";
-  onToggleViewMode: (mode: "grid" | "table") => void;
+  onToggleViewMode: (v: "grid" | "table") => void;
   totalCount: number;
+  activeCount: number;
+  inactiveCount: number;
 }
 
 export function DepartmentsFilterBar({
@@ -27,74 +28,99 @@ export function DepartmentsFilterBar({
   viewMode,
   onToggleViewMode,
   totalCount,
+  activeCount,
+  inactiveCount,
 }: DepartmentsFilterBarProps) {
   return (
-    <div className="space-y-3">
-      <Card className="p-4 border border-border-base bg-surface shadow-2xs rounded-xl">
-        <div className="flex flex-col lg:flex-row gap-4 items-center justify-between">
-          <div className="flex flex-wrap items-center gap-3 flex-1 w-full lg:w-auto">
-            {/* Search Input */}
-            <div className="relative w-full sm:w-80">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-tertiary" />
-              <Input
-                className="pl-9 text-xs h-9 bg-surface-subtle/50"
-                placeholder="Search departments..."
-                value={search}
-                onChange={(e) => onSearchChange(e.target.value)}
-              />
-            </div>
-
-            {/* Status Filter */}
-            <select
-              className="h-9 rounded-md border border-border-base bg-surface px-3 text-xs font-medium text-text-primary shadow-2xs focus:border-brand focus:outline-none min-w-[130px]"
-              value={statusFilter}
-              onChange={(e) => onStatusFilterChange(e.target.value)}
-            >
-              <option value="">Status: All</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-          </div>
-
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onToggleSort}
-              className="gap-1.5 text-xs h-9"
-            >
-              <ArrowUpDown className="h-3.5 w-3.5" /> Sort: {sortOrder === "asc" ? "A-Z" : "Z-A"}
-            </Button>
-
-            <div className="flex items-center border border-border-base rounded-md p-0.5 bg-surface-subtle">
-              <button
-                type="button"
-                onClick={() => onToggleViewMode("grid")}
-                className={`p-1.5 rounded text-xs transition-colors ${
-                  viewMode === "grid" ? "bg-surface text-brand shadow-2xs font-bold" : "text-text-tertiary hover:text-text-primary"
-                }`}
-                title="Bento Grid View"
-              >
-                <Grid className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => onToggleViewMode("table")}
-                className={`p-1.5 rounded text-xs transition-colors ${
-                  viewMode === "table" ? "bg-surface text-brand shadow-2xs font-bold" : "text-text-tertiary hover:text-text-primary"
-                }`}
-                title="Table List View"
-              >
-                <List className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      <div className="flex items-center justify-between text-xs text-text-tertiary px-1">
-        <span>Showing {totalCount} departments</span>
+    <motion.div
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-border-base pb-2.5"
+    >
+      {/* Status Filter Pills */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 sm:pb-0">
+        <button
+          onClick={() => onStatusFilterChange("")}
+          className={`rounded-sm px-2.5 py-0.5 text-xs font-medium transition-all cursor-pointer ${
+            !statusFilter
+              ? "bg-brand text-white shadow-2xs"
+              : "bg-surface-subtle text-text-secondary hover:bg-surface-muted border border-border-base"
+          }`}
+        >
+          All ({totalCount})
+        </button>
+        <button
+          onClick={() => onStatusFilterChange("active")}
+          className={`rounded-sm px-2.5 py-0.5 text-xs font-medium transition-all cursor-pointer ${
+            statusFilter === "active"
+              ? "bg-success text-white shadow-2xs"
+              : "bg-surface-subtle text-text-secondary hover:bg-surface-muted border border-border-base"
+          }`}
+        >
+          Active ({activeCount})
+        </button>
+        <button
+          onClick={() => onStatusFilterChange("inactive")}
+          className={`rounded-sm px-2.5 py-0.5 text-xs font-medium transition-all cursor-pointer ${
+            statusFilter === "inactive"
+              ? "bg-neutral-600 text-white shadow-2xs"
+              : "bg-surface-subtle text-text-secondary hover:bg-surface-muted border border-border-base"
+          }`}
+        >
+          Inactive ({inactiveCount})
+        </button>
       </div>
-    </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {/* Search Input */}
+        <div className="relative max-w-xs flex-1 sm:w-56">
+          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-tertiary" />
+          <Input
+            className="h-8 pl-8 text-xs bg-surface"
+            placeholder="Search departments..."
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+          />
+        </div>
+
+        {/* Sort Selector */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={onToggleSort}
+            className="h-8 px-2.5 rounded-md border border-border-base bg-surface text-xs font-medium text-text-primary shadow-2xs hover:bg-surface-subtle transition-colors flex items-center gap-1.5 cursor-pointer"
+          >
+            <ArrowUpDown className="h-3.5 w-3.5 text-text-tertiary" />
+            Sort: Name ({sortOrder === "asc" ? "A-Z" : "Z-A"})
+          </button>
+        </div>
+
+        {/* View Mode Toggle Tabs */}
+        <div className="flex items-center rounded-md border border-border-base bg-surface p-0.5">
+          <button
+            onClick={() => onToggleViewMode("grid")}
+            aria-label="Grid view"
+            className={`rounded-md p-1.5 text-xs transition-colors cursor-pointer ${
+              viewMode === "grid"
+                ? "bg-brand text-white shadow-2xs font-bold"
+                : "text-text-tertiary hover:text-text-primary"
+            }`}
+          >
+            <LayoutGrid className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={() => onToggleViewMode("table")}
+            aria-label="Table view"
+            className={`rounded-md p-1.5 text-xs transition-colors cursor-pointer ${
+              viewMode === "table"
+                ? "bg-brand text-white shadow-2xs font-bold"
+                : "text-text-tertiary hover:text-text-primary"
+            }`}
+          >
+            <List className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+    </motion.div>
   );
 }
