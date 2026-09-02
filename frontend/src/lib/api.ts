@@ -423,6 +423,9 @@ export const api = {
       body: JSON.stringify({ permissionKeys }),
     }),
 
+  exportRoles: () => `${API_BASE}/api/v1/roles/export`,
+
+
   // ---- Departments ----
   listDepartments: (page = 1, pageSize = 10, search = "") =>
     request<ListResponse<Department>>(

@@ -202,3 +202,58 @@ export const listPermissions = asyncHandler(
     ApiResponse.success(res, 200, "Permissions fetched", grouped);
   }
 );
+
+export const exportRoles = asyncHandler(async (_req: Request, res: Response) => {
+  const roles = await prisma.role.findMany({
+    orderBy: [{ priority: "asc" }],
+    select: {
+      id: true,
+      name: true,
+      displayName: true,
+      description: true,
+      isSpecial: true,
+      isSystem: true,
+      priority: true,
+      _count: { select: { users: true } },
+      rolePermissions: {
+        select: { permission: { select: { key: true } } },
+      },
+    },
+  });
+
+  const headers = [
+    "ID",
+    "Display Name",
+    "Key",
+    "Description",
+    "Type",
+    "Priority",
+    "Assigned Users",
+    "Permission Count",
+    "Permissions",
+  ];
+
+  const rows = roles.map((r) => {
+    const keys = r.rolePermissions.map((rp) => rp.permission.key).join("; ");
+    const type = r.isSpecial ? "Special" : r.isSystem ? "System" : "Custom";
+    return [
+      r.id,
+      `"${(r.displayName || "").replace(/"/g, '""')}"`,
+      `"${(r.name || "").replace(/"/g, '""')}"`,
+      `"${(r.description || "").replace(/"/g, '""')}"`,
+      type,
+      r.priority,
+      r._count.users,
+      r.isSpecial ? "All" : r.rolePermissions.length,
+      `"${keys.replace(/"/g, '""')}"`,
+    ].join(",");
+  });
+
+  const csv = [headers.join(","), ...rows].join("\n");
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="roles_permissions_export_${Date.now()}.csv"`
+  );
+  res.status(200).send(csv);
+});

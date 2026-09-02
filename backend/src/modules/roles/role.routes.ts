@@ -14,6 +14,11 @@ router.get(
   roleController.listPermissions
 );
 router.get(
+  "/export",
+  requirePermission(PERMISSIONS.ROLE_READ),
+  roleController.exportRoles
+);
+router.get(
   "/",
   requirePermission(PERMISSIONS.ROLE_READ),
   roleController.listRoles
