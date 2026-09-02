@@ -14,6 +14,11 @@ router.put("/me/profile", userController.updateProfile);
 router.post("/me/change-password", userController.changePassword);
 
 // ---- Draft Management ----
+router.get(
+  "/drafts",
+  requirePermission(PERMISSIONS.USER_CREATE),
+  userController.listDrafts
+);
 router.post(
   "/draft",
   requirePermission(PERMISSIONS.USER_CREATE),

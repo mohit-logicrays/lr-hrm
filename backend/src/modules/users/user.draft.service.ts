@@ -56,6 +56,19 @@ export class UserDraftService {
   }
 
   /**
+   * List the caller's own active (non-expired) drafts, newest first.
+   */
+  async listMine(createdBy: string) {
+    await prisma.userDraft.deleteMany({
+      where: { expiresAt: { lt: new Date() } },
+    });
+    return prisma.userDraft.findMany({
+      where: { createdBy },
+      orderBy: { updatedAt: "desc" },
+    });
+  }
+
+  /**
    * Delete draft on completion or cancellation
    */
   async deleteDraft(draftId: string) {

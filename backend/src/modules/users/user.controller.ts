@@ -51,6 +51,11 @@ export const saveDraft = asyncHandler(async (req: Request, res: Response) => {
   ApiResponse.success(res, 200, "User draft saved", draft);
 });
 
+export const listDrafts = asyncHandler(async (req: Request, res: Response) => {
+  const drafts = await userDraftService.listMine(req.user?.id || "");
+  ApiResponse.success(res, 200, "User drafts listed", drafts);
+});
+
 export const getDraft = asyncHandler(async (req: Request, res: Response) => {
   const draft = await userDraftService.getDraft(req.params.draftId);
   ApiResponse.success(res, 200, "Draft fetched", draft);

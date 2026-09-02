@@ -1,15 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useState, FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { AnimatePresence } from "framer-motion";
 import { api, Department, ListResponse, Role, User, UserStatus } from "@/lib/api";
 import { usePermission } from "@/providers/auth-provider";
-import { PageHeader } from "@/components/shared/page-header";
-import { PaginationBar } from "@/components/shared/pagination-bar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -27,7 +27,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Users } from "lucide-react";
+import { UsersHeader } from "@/components/users/management/UsersHeader";
+import { UsersFilterBar } from "@/components/users/management/UsersFilterBar";
+import { UserTableRow } from "@/components/users/management/UserTableRow";
 
 function displayName(u: User): string {
   return (
@@ -41,226 +44,397 @@ function roleName(u: User): string {
   return typeof u.role === "string" ? u.role : u.role.displayName || u.role.name;
 }
 
-const USER_STATUSES: UserStatus[] = ["ACTIVE", "INACTIVE", "SUSPENDED"];
-
 export default function UsersPage() {
+  const router = useRouter();
   const perms = usePermission("user");
+
   const [result, setResult] = useState<ListResponse<User> | null>(null);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
+  const [departmentFilter, setDepartmentFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   const [loading, setLoading] = useState(true);
-  const [dialog, setDialog] = useState<"create" | { edit: User } | null>(null);
 
-  const load = useCallback(async () => {
+  // Row selection for bulk actions
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [editUser, setEditUser] = useState<User | null>(null);
+  const [resetPasswordModal, setResetPasswordModal] = useState<{ user: User; newPassword?: string } | null>(null);
+
+  // Load dropdowns & user list
+  const loadLookups = useCallback(async () => {
+    try {
+      const [rRes, dRes] = await Promise.all([
+        api.listRoles(),
+        api.listDepartments(1, 100),
+      ]);
+      setRoles(rRes.data);
+      setDepartments(dRes.data);
+    } catch {
+      // Ignore lookup failure
+    }
+  }, []);
+
+  const loadUsers = useCallback(async () => {
+    setLoading(true);
     try {
       const res = await api.listUsers(page, 10, search);
-      setResult(res);
+      let filtered = res.data;
+      if (roleFilter) {
+        filtered = filtered.filter((u) => {
+          const rId = typeof u.role === "string" ? u.role : u.role.id;
+          return rId === roleFilter;
+        });
+      }
+      if (departmentFilter) {
+        filtered = filtered.filter((u) => u.departmentId === departmentFilter || u.department?.id === departmentFilter);
+      }
+      if (statusFilter) {
+        filtered = filtered.filter((u) => u.status === statusFilter);
+      }
+
+      setResult({
+        ...res,
+        data: filtered,
+      });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load users");
     } finally {
       setLoading(false);
     }
-  }, [page, search]);
+  }, [page, search, roleFilter, departmentFilter, statusFilter]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    loadLookups();
+  }, [loadLookups]);
 
+  useEffect(() => {
+    loadUsers();
+  }, [loadUsers]);
+
+  // Bulk Selection Handlers
+  const allSelected =
+    Boolean(result?.data.length) && selectedUserIds.length === result?.data.length;
+
+  function toggleSelectAll() {
+    if (allSelected) {
+      setSelectedUserIds([]);
+    } else {
+      setSelectedUserIds(result?.data.map((u) => u.id) || []);
+    }
+  }
+
+  function toggleSelectUser(id: string) {
+    setSelectedUserIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  }
+
+  // Delete User Handler
   async function handleDelete(u: User) {
-    if (!window.confirm(`Delete user "${displayName(u)}"?`)) return;
+    if (!window.confirm(`Are you sure you want to delete "${displayName(u)}"?`)) return;
     try {
       await api.deleteUser(u.id);
-      toast.success("User deleted");
-      load();
+      toast.success(`User "${displayName(u)}" deleted`);
+      loadUsers();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to delete user");
     }
   }
 
+  // Status Change Handler
+  async function handleStatusChange(u: User, newStatus: UserStatus) {
+    try {
+      await api.updateUserStatus(u.id, newStatus);
+      toast.success(`Updated "${displayName(u)}" status to ${newStatus}`);
+      loadUsers();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update status");
+    }
+  }
+
+  // Reset Password Handler
+  async function handleResetPassword(u: User) {
+    try {
+      const res = await api.resetUserPassword(u.id);
+      setResetPasswordModal({ user: u, newPassword: res.data.temporaryPassword });
+      toast.success(`Password reset generated for ${displayName(u)}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to reset password");
+    }
+  }
+
+  // Export Users to CSV
+  function handleExportCSV() {
+    if (!result?.data || result.data.length === 0) {
+      toast.error("No user records available to export");
+      return;
+    }
+
+    const headers = ["Employee ID", "Full Name", "Email", "Role", "Department", "Designation", "Status"];
+    const rows = result.data.map((u) => [
+      u.employeeId || "—",
+      `"${displayName(u)}"`,
+      u.email,
+      `"${roleName(u)}"`,
+      `"${u.department?.name || "—"}"`,
+      `"${u.designation || "—"}"`,
+      u.status,
+    ]);
+
+    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `users_export_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success("Users CSV exported successfully!");
+  }
+
+  // Bulk Actions Handlers
+  async function handleBulkStatusChange(status: UserStatus) {
+    if (selectedUserIds.length === 0) return;
+    try {
+      await Promise.all(selectedUserIds.map((id) => api.updateUserStatus(id, status)));
+      toast.success(`Updated ${selectedUserIds.length} users to ${status}`);
+      setSelectedUserIds([]);
+      loadUsers();
+    } catch {
+      toast.error("Bulk status update failed");
+    }
+  }
+
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="User Management"
-        subtitle={result ? `${result.pagination.total} users` : "Manage organization members"}
-        actions={
-          perms.create ? (
-            <Button onClick={() => setDialog("create")}>
-              <Plus /> Create user
-            </Button>
-          ) : undefined
-        }
+    <div className="space-y-6">
+      {/* Header Section Component */}
+      <UsersHeader
+        totalCount={result?.pagination.total || 0}
+        selectedCount={selectedUserIds.length}
+        canCreate={perms.create}
+        onBulkStatusChange={handleBulkStatusChange}
+        onExportCSV={handleExportCSV}
       />
 
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary" />
-        <Input
-          className="pl-9"
-          placeholder="Search by name or email…"
-          value={search}
-          onChange={(e) => {
-            setPage(1);
-            setSearch(e.target.value);
-          }}
-        />
-      </div>
+      {/* Filter Bar Component */}
+      <UsersFilterBar
+        search={search}
+        onSearchChange={(v) => {
+          setPage(1);
+          setSearch(v);
+        }}
+        roleFilter={roleFilter}
+        onRoleFilterChange={(v) => {
+          setPage(1);
+          setRoleFilter(v);
+        }}
+        departmentFilter={departmentFilter}
+        onDepartmentFilterChange={(v) => {
+          setPage(1);
+          setDepartmentFilter(v);
+        }}
+        statusFilter={statusFilter}
+        onStatusFilterChange={(v) => {
+          setPage(1);
+          setStatusFilter(v);
+        }}
+        roles={roles}
+        departments={departments}
+        onClearFilters={() => {
+          setRoleFilter("");
+          setDepartmentFilter("");
+          setStatusFilter("");
+          setSearch("");
+        }}
+      />
 
-      <div className="rounded-lg border border-border-base bg-surface">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Department</TableHead>
-              <TableHead>Designation</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={i}>
-                  {Array.from({ length: 7 }).map((_, j) => (
-                    <TableCell key={j}>
-                      <Skeleton className="h-4 w-full" />
-                    </TableCell>
+      {/* Data Table Card */}
+      <Card className="border border-border-base bg-surface shadow-2xs rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-surface-subtle/50 hover:bg-surface-subtle/50">
+                <TableHead className="w-12 text-center">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={toggleSelectAll}
+                    className="rounded-xs border-border-base text-brand focus:ring-brand h-4 w-4 cursor-pointer"
+                  />
+                </TableHead>
+                <TableHead className="font-bold text-xs uppercase tracking-wider">Name &amp; Email</TableHead>
+                <TableHead className="font-bold text-xs uppercase tracking-wider">Role</TableHead>
+                <TableHead className="font-bold text-xs uppercase tracking-wider">Department</TableHead>
+                <TableHead className="font-bold text-xs uppercase tracking-wider">Status</TableHead>
+                <TableHead className="font-bold text-xs uppercase tracking-wider text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <TableRow key={i}>
+                    {Array.from({ length: 6 }).map((_, j) => (
+                      <TableCell key={j}>
+                        <Skeleton className="h-5 w-full" />
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : !result?.data || result.data.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-12 text-text-tertiary text-xs">
+                    <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    No user records found matching search or filter criteria.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                <AnimatePresence mode="popLayout">
+                  {result.data.map((u) => (
+                    <UserTableRow
+                      key={u.id}
+                      user={u}
+                      isSelected={selectedUserIds.includes(u.id)}
+                      canDelete={perms.delete}
+                      onToggleSelect={toggleSelectUser}
+                      onEdit={setEditUser}
+                      onResetPassword={handleResetPassword}
+                      onStatusChange={handleStatusChange}
+                      onDelete={handleDelete}
+                    />
                   ))}
-                </TableRow>
-              ))
-            ) : (
-              result?.data.map((u) => (
-                <TableRow key={u.id}>
-                  <TableCell className="font-medium">{displayName(u)}</TableCell>
-                  <TableCell className="text-text-secondary">{u.email}</TableCell>
-                  <TableCell>
-                    <Badge className={roleBadgeClass(u)}>{roleName(u)}</Badge>
-                  </TableCell>
-                  <TableCell className="text-text-secondary">
-                    {u.department?.name ?? "—"}
-                  </TableCell>
-                  <TableCell className="text-text-secondary">
-                    {u.designation ?? "—"}
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge status={u.status} />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex justify-end gap-1">
-                      {perms.update && (
-                        <Button variant="ghost" size="icon-sm" aria-label="Edit user" onClick={() => setDialog({ edit: u })}>
-                          <Pencil />
-                        </Button>
-                      )}
-                      {perms.delete && (
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label="Delete user"
-                          className="text-muted-foreground hover:text-error"
-                          onClick={() => handleDelete(u)}
-                        >
-                          <Trash2 />
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+                </AnimatePresence>
+              )}
+            </TableBody>
+          </Table>
+        </div>
 
-      <PaginationBar
-        pagination={result?.pagination ?? null}
-        onPrev={() => setPage((p) => Math.max(1, p - 1))}
-        onNext={() => setPage((p) => p + 1)}
-      />
+        {/* Pagination Footer */}
+        {result?.pagination && (
+          <div className="px-4 py-3 border-t border-border-base bg-surface-subtle/30 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+            <div className="text-text-tertiary">
+              Showing <span className="font-bold text-text-primary">{result.data.length > 0 ? (page - 1) * 10 + 1 : 0}</span> to{" "}
+              <span className="font-bold text-text-primary">{Math.min(page * 10, result.pagination.total)}</span> of{" "}
+              <span className="font-bold text-text-primary">{result.pagination.total}</span> users
+            </div>
 
-      {dialog && (
-        <UserFormDialog
-          user={dialog === "create" ? null : (dialog as { edit: User }).edit}
-          onClose={() => setDialog(null)}
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="outline"
+                size="icon-sm"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="h-7 w-7"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </Button>
+              <span className="px-2 font-mono font-medium text-text-secondary">
+                Page {page} of {result.pagination.totalPages || 1}
+              </span>
+              <Button
+                variant="outline"
+                size="icon-sm"
+                onClick={() => setPage((p) => Math.min(result.pagination.totalPages, p + 1))}
+                disabled={page >= (result.pagination.totalPages || 1)}
+                className="h-7 w-7"
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {/* Edit User Modal */}
+      {editUser && (
+        <UserEditModal
+          user={editUser}
+          roles={roles}
+          departments={departments}
+          onClose={() => setEditUser(null)}
           onSaved={() => {
-            setDialog(null);
-            load();
+            setEditUser(null);
+            loadUsers();
           }}
         />
+      )}
+
+      {/* Password Reset Modal */}
+      {resetPasswordModal && (
+        <Dialog open onOpenChange={() => setResetPasswordModal(null)}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-base font-bold font-heading">
+                Password Reset Successfully
+              </DialogTitle>
+              <DialogDescription className="text-xs">
+                A new temporary password has been assigned for{" "}
+                <strong>{displayName(resetPasswordModal.user)}</strong>.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="p-3 rounded-lg border border-brand/20 bg-brand/5 space-y-1 my-2">
+              <span className="text-[10px] text-text-tertiary uppercase font-mono tracking-wider block">
+                Temporary Password
+              </span>
+              <code className="text-sm font-bold font-mono text-brand block select-all">
+                {resetPasswordModal.newPassword}
+              </code>
+            </div>
+            <DialogFooter>
+              <Button size="sm" onClick={() => setResetPasswordModal(null)} className="text-xs h-8">
+                Done
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );
 }
 
-function UserFormDialog({
+function UserEditModal({
   user,
+  roles,
+  departments,
   onClose,
   onSaved,
 }: {
-  user: User | null;
+  user: User;
+  roles: Role[];
+  departments: Department[];
   onClose: () => void;
   onSaved: () => void;
 }) {
   const [saving, setSaving] = useState(false);
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [form, setForm] = useState(() => ({
-    firstName: user?.firstName ?? "",
-    lastName: user?.lastName ?? "",
-    email: user?.email ?? "",
-    roleId:
-      user && typeof user.role !== "string" ? user.role.id : "",
-    departmentId: user?.departmentId ?? user?.department?.id ?? "",
-    designation: user?.designation ?? "",
-    phone: user?.phone ?? "",
-    status: (user?.status ?? "ACTIVE") as UserStatus,
-  }));
+  const [form, setForm] = useState({
+    firstName: user.firstName || "",
+    lastName: user.lastName || "",
+    email: user.email || "",
+    roleId: typeof user.role === "string" ? user.role : user.role?.id || "",
+    departmentId: user.departmentId || user.department?.id || "",
+    designation: user.designation || "",
+    phone: user.phone || "",
+    status: user.status || "ACTIVE",
+  });
 
-  useEffect(() => {
-    let live = true;
-    Promise.all([api.listRoles(), api.listDepartments(1, 100)])
-      .then(([r, d]) => {
-        if (!live) return;
-        setRoles(r.data);
-        setDepartments(d.data);
-        setForm((f) => ({ ...f, roleId: f.roleId || (r.data[0]?.id ?? "") }));
-      })
-      .catch((err) =>
-        toast.error(err instanceof Error ? err.message : "Failed to load roles")
-      );
-    return () => {
-      live = false;
-    };
-  }, []);
-
-  async function onSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setSaving(true);
     try {
-      if (user) {
-        await api.updateUser(user.id, {
-          firstName: form.firstName,
-          lastName: form.lastName,
-          phone: form.phone || null,
-          designation: form.designation || null,
-          roleId: form.roleId || undefined,
-          departmentId: form.departmentId || null,
-          status: form.status,
-        });
-        toast.success("User updated");
-      } else {
-        await api.createUser({
-          email: form.email,
-          firstName: form.firstName,
-          lastName: form.lastName,
-          phone: form.phone || null,
-          designation: form.designation || null,
-          roleId: form.roleId,
-          departmentId: form.departmentId || null,
-          status: form.status,
-        });
-        toast.success("User created");
-      }
+      await api.updateUser(user.id, {
+        firstName: form.firstName,
+        lastName: form.lastName,
+        phone: form.phone || null,
+        designation: form.designation || null,
+        roleId: form.roleId || undefined,
+        departmentId: form.departmentId || null,
+        status: form.status as UserStatus,
+      });
+      toast.success("User updated successfully");
       onSaved();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save user");
@@ -271,69 +445,63 @@ function UserFormDialog({
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="rounded-lg sm:max-w-md">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{user ? "Edit user" : "Create user"}</DialogTitle>
-          <DialogDescription>
-            {user
-              ? "Update profile, role, and membership details."
-              : "A default password is set; the user changes it after first login."}
+          <DialogTitle className="text-base font-bold font-heading">
+            Edit User Profile
+          </DialogTitle>
+          <DialogDescription className="text-xs">
+            Update account details, assigned role, and status.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={onSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="firstName">First name</Label>
+
+        <form onSubmit={handleSubmit} className="space-y-3 pt-2">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold">First Name</Label>
               <Input
-                id="firstName"
                 required
+                className="text-xs h-8.5"
                 value={form.firstName}
                 onChange={(e) => setForm({ ...form, firstName: e.target.value })}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="lastName">Last name</Label>
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold">Last Name</Label>
               <Input
-                id="lastName"
                 required
+                className="text-xs h-8.5"
                 value={form.lastName}
                 onChange={(e) => setForm({ ...form, lastName: e.target.value })}
               />
             </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              required
-              disabled={Boolean(user)}
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-            />
+
+          <div className="space-y-1">
+            <Label className="text-xs font-semibold">Email Address (Read-only)</Label>
+            <Input disabled className="text-xs h-8.5 bg-surface-subtle" value={form.email} />
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="role">Role</Label>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold">Role</Label>
               <select
-                id="role"
-                className="h-10 w-full rounded-md border border-border-base bg-surface px-3 text-sm"
+                className="h-8.5 w-full rounded-md border border-border-base bg-surface px-2.5 text-xs font-medium text-text-primary shadow-2xs focus:border-brand focus:outline-none"
                 value={form.roleId}
                 onChange={(e) => setForm({ ...form, roleId: e.target.value })}
               >
-                {roles.length === 0 && <option value="">Loading…</option>}
                 {roles.map((r) => (
                   <option key={r.id} value={r.id}>
-                    {r.displayName || r.name}
+                    {r.displayName}
                   </option>
                 ))}
               </select>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="department">Department</Label>
+
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold">Department</Label>
               <select
-                id="department"
-                className="h-10 w-full rounded-md border border-border-base bg-surface px-3 text-sm"
+                className="h-8.5 w-full rounded-md border border-border-base bg-surface px-2.5 text-xs font-medium text-text-primary shadow-2xs focus:border-brand focus:outline-none"
                 value={form.departmentId}
                 onChange={(e) => setForm({ ...form, departmentId: e.target.value })}
               >
@@ -346,89 +514,49 @@ function UserFormDialog({
               </select>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="designation">Designation</Label>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold">Designation</Label>
               <Input
-                id="designation"
+                className="text-xs h-8.5"
                 value={form.designation}
                 onChange={(e) => setForm({ ...form, designation: e.target.value })}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="phone">Phone</Label>
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold">Phone</Label>
               <Input
-                id="phone"
+                className="text-xs h-8.5"
                 value={form.phone}
                 onChange={(e) => setForm({ ...form, phone: e.target.value })}
               />
             </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="status">Status</Label>
+
+          <div className="space-y-1">
+            <Label className="text-xs font-semibold">Status</Label>
             <select
-              id="status"
-              className="h-10 w-full rounded-md border border-border-base bg-surface px-3 text-sm"
+              className="h-8.5 w-full rounded-md border border-border-base bg-surface px-2.5 text-xs font-medium text-text-primary shadow-2xs focus:border-brand focus:outline-none"
               value={form.status}
               onChange={(e) => setForm({ ...form, status: e.target.value as UserStatus })}
             >
-              {USER_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s.charAt(0) + s.slice(1).toLowerCase()}
-                </option>
-              ))}
+              <option value="ACTIVE">Active</option>
+              <option value="INACTIVE">Inactive</option>
+              <option value="SUSPENDED">Suspended</option>
             </select>
           </div>
-          <DialogFooter>
-            <Button type="submit" disabled={saving || !form.roleId}>
-              {saving ? "Saving…" : user ? "Save changes" : "Create user"}
+
+          <DialogFooter className="pt-2">
+            <Button type="button" variant="outline" size="sm" onClick={onClose} className="text-xs h-8">
+              Cancel
+            </Button>
+            <Button type="submit" size="sm" disabled={saving} className="text-xs h-8 bg-brand hover:bg-brand-hover text-white">
+              {saving ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
-  );
-}
-
-const ROLE_STYLES: Record<string, string> = {
-  superadmin: "bg-brand-soft text-brand",
-  founder: "bg-brand-soft text-brand",
-  ceo: "bg-brand-soft text-brand",
-  cto: "bg-brand-soft text-brand",
-  coo: "bg-brand-soft text-brand",
-  cfo: "bg-brand-soft text-brand",
-  hr: "bg-warning-light text-warning",
-  manager: "bg-warning-light text-warning",
-  lead: "bg-info-light text-info",
-  associate: "bg-neutral-100 text-neutral-700",
-  member: "bg-neutral-100 text-neutral-700",
-};
-
-function roleBadgeClass(u: User): string {
-  const key =
-    typeof u.role === "string"
-      ? u.role.toLowerCase()
-      : u.role.name.toLowerCase();
-  return ROLE_STYLES[key] ?? "border-border bg-surface text-text-secondary";
-}
-
-const STATUS_STYLES: Record<string, { dot: string; label: string; text: string }> = {
-  ACTIVE: { dot: "bg-success", label: "Active", text: "text-success" },
-  INACTIVE: { dot: "bg-neutral-400", label: "Inactive", text: "text-text-secondary" },
-  SUSPENDED: { dot: "bg-error", label: "Suspended", text: "text-error" },
-};
-
-function StatusBadge({ status }: { status?: string }) {
-  const s =
-    STATUS_STYLES[status ?? ""] ?? {
-      dot: "bg-neutral-400",
-      label: status ? status.charAt(0) + status.slice(1).toLowerCase() : "Inactive",
-      text: "text-text-secondary",
-    };
-  return (
-    <span className={`inline-flex items-center gap-1.5 text-sm ${s.text}`}>
-      <span className={`h-2 w-2 rounded-full ${s.dot}`} />
-      {s.label}
-    </span>
   );
 }

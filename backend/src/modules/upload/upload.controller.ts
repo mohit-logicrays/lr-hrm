@@ -6,20 +6,53 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { ApiResponse } from "../../utils/ApiResponse";
 import { AppError } from "../../utils/AppError";
 
-const uploadDir = path.join(process.cwd(), "uploads");
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
+const uploadRootDir = path.join(process.cwd(), "uploads");
+if (!fs.existsSync(uploadRootDir)) {
+  fs.mkdirSync(uploadRootDir, { recursive: true });
 }
 
-// Storage Engine
+// Allowed, normalized top-level folders. Anything else falls back to "documents".
+const ALLOWED_FOLDERS = new Set([
+  "avatars",
+  "experience-letters",
+  "relieving-letters",
+  "documents",
+]);
+
+/**
+ * Put uploads into a subfolder so the tree stays organized:
+ *   uploads/<folder>/<safe-basename>_<timestamp>_<rand><ext>
+ * The client sends a `folder` FormData field; unknown values sanitize to a
+ * safe slug and fall back under the `documents` bucket.
+ */
+function resolveFolder(folder?: string): string {
+  if (!folder) return "documents";
+  const slug = folder
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  if (!slug) return "documents";
+  return ALLOWED_FOLDERS.has(slug) ? slug : "documents";
+}
+
+// Storage Engine — resolves the destination per-request from `body.folder`.
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, uploadDir);
+  destination: (req, _file, cb) => {
+    const folder = resolveFolder(req.body?.folder);
+    const dir = path.join(uploadRootDir, folder);
+    fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
   },
   filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const basename = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9_-]/g, "_");
-    const uniqueSuffix = `${Date.now()}_${Math.round(Math.random() * 1e4)}`;
+    const ext = path.extname(file.originalname).toLowerCase();
+    const basename = path
+      .basename(file.originalname, ext)
+      .replace(/[^a-zA-Z0-9_-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80) || "file";
+    const uniqueSuffix = `${Date.now()}_${Math.round(Math.random() * 1e6)}`;
     cb(null, `${basename}_${uniqueSuffix}${ext}`);
   },
 });
@@ -54,10 +87,12 @@ export const handleSingleUpload = asyncHandler(async (req: Request, res: Respons
     throw new AppError(400, "No file uploaded");
   }
 
-  const fileUrl = `/uploads/${req.file.filename}`;
+  const folder = resolveFolder(req.body?.folder);
+  const fileUrl = `/uploads/${folder}/${req.file.filename}`;
   ApiResponse.success(res, 200, "File uploaded successfully", {
     url: fileUrl,
     filename: req.file.filename,
+    folder,
     originalName: req.file.originalname,
     mimetype: req.file.mimetype,
     size: req.file.size,

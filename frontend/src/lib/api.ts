@@ -6,9 +6,12 @@ export interface Pagination {
   total: number;
   page: number;
   pageSize: number;
+  limit?: number;
   totalPages: number;
   hasPrevious: boolean;
   hasNext: boolean;
+  hasNextPage?: boolean;
+  hasPrevPage?: boolean;
   previous: number | null;
   next: number | null;
 }
@@ -69,6 +72,12 @@ export interface User {
   id: string;
   name?: string;
   email: string;
+  employeeId?: string | null;
+  personalEmail?: string | null;
+  mobile?: string | null;
+  alternateMobile?: string | null;
+  gender?: string | null;
+  avatarUrl?: string | null;
   role: string | Role;
   designation?: string | null;
   phone?: string | null;
@@ -94,6 +103,22 @@ export interface CreateUserPayload {
   departmentId?: string | null;
   status?: UserStatus;
   password?: string;
+}
+
+export interface UserDraft {
+  id: string;
+  officialEmail?: string | null;
+  currentStep: number;
+  stepData: Record<string, unknown>;
+  createdBy?: string | null;
+  createdAt?: string;
+  updatedAt: string;
+  expiresAt?: string;
+}
+
+export interface CreateFullUserPayload {
+  draftId?: string;
+  [key: string]: unknown;
 }
 
 export interface UpdateUserPayload {
@@ -300,7 +325,38 @@ class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+/** Resolves a backend file url (`/uploads/...`) to an absolute, loadable url. */
+export function apiFileUrl(url?: string | null): string {
+  if (!url) return "";
+  if (/^https?:\/\//.test(url) || url.startsWith("data:")) return url;
+  return `${API_BASE}${url.startsWith("/") ? url : `/${url}`}`;
+}
+
+// In-flight refresh so concurrent 401s share one token rotation round.
+let refreshInFlight: Promise<boolean> | null = null;
+
+async function doRefresh(): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+function refreshToken(): Promise<boolean> {
+  if (!refreshInFlight) {
+    refreshInFlight = doRefresh().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
+}
+
+async function fetchWithRetry(path: string, init?: RequestInit, retried = false): Promise<Response> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
     credentials: "include",
@@ -309,6 +365,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...init?.headers,
     },
   });
+
+  // On 401 (except auth endpoints), try to refresh the access token once and retry.
+  if (res.status === 401 && !retried && !path.includes("/auth/")) {
+    const refreshed = await refreshToken();
+    if (refreshed) {
+      return fetchWithRetry(path, init, true);
+    }
+  }
+
+  return res;
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetchWithRetry(path, init);
 
   if (res.status === 204) return undefined as T;
 
@@ -366,29 +436,33 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
-  createFullUser: (payload: any) =>
+  createFullUser: (payload: CreateFullUserPayload) =>
     request<ItemResponse<User>>("/api/v1/users/full", {
       method: "POST",
       body: JSON.stringify(payload),
     }),
 
-  saveUserDraft: (payload: { draftId?: string; officialEmail?: string; currentStep: number; stepData: any }) =>
-    request<ItemResponse<{ id: string; currentStep: number; stepData: any }>>("/api/v1/users/draft", {
+  saveUserDraft: (payload: { draftId?: string; officialEmail?: string; currentStep: number; stepData: object }) =>
+    request<ItemResponse<UserDraft>>("/api/v1/users/draft", {
       method: "POST",
       body: JSON.stringify(payload),
     }),
 
   getUserDraft: (draftId: string) =>
-    request<ItemResponse<{ id: string; officialEmail: string; currentStep: number; stepData: any }>>(
+    request<ItemResponse<UserDraft>>(
       `/api/v1/users/draft/${draftId}`
     ),
 
   deleteUserDraft: (draftId: string) =>
     request<void>(`/api/v1/users/draft/${draftId}`, { method: "DELETE" }),
 
-  uploadFile: async (file: File) => {
+  listUserDrafts: () =>
+    request<ListResponse<UserDraft>>("/api/v1/users/drafts"),
+
+  uploadFile: async (file: File, folder?: string) => {
     const formData = new FormData();
     formData.append("file", file);
+    if (folder) formData.append("folder", folder);
     const res = await fetch(`${API_BASE}/api/v1/upload`, {
       method: "POST",
       body: formData,
