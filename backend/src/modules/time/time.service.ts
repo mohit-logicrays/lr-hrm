@@ -383,7 +383,6 @@ export class TimeService {
       hoursPerProject,
       billableRatio: {
         billableHours: Number(totalBillable.toFixed(1)),
-        nonBillableHours: Number(totalNonBillable.toFixed(1)),
         billablePercentage: totalBillable + totalNonBillable > 0
           ? Number(((totalBillable / (totalBillable + totalNonBillable)) * 100).toFixed(1))
           : 0,
@@ -391,6 +390,76 @@ export class TimeService {
       employeeUtilization,
     };
   }
+
+  // ---------- Active Timer Persistence (DB Sync) ----------
+  async getActiveTimer(userId: string) {
+    const timer = await prisma.activeTimer.findUnique({
+      where: { userId },
+    });
+    if (!timer) return null;
+
+    // If timer was running, calculate delta seconds elapsed on the server
+    if (timer.isRunning && timer.lastStartedAt) {
+      const deltaSecs = Math.floor((Date.now() - new Date(timer.lastStartedAt).getTime()) / 1000);
+      const newElapsed = timer.elapsedSeconds + deltaSecs;
+      const newRemaining = timer.mode === "countdown"
+        ? Math.max(0, timer.targetSeconds - newElapsed)
+        : timer.remainingSeconds;
+
+      return {
+        ...timer,
+        elapsedSeconds: newElapsed,
+        remainingSeconds: newRemaining,
+      };
+    }
+
+    return timer;
+  }
+
+  async syncActiveTimer(userId: string, data: {
+    projectId?: string | null;
+    taskId?: string | null;
+    description?: string | null;
+    mode?: string;
+    targetSeconds?: number;
+    elapsedSeconds?: number;
+    remainingSeconds?: number;
+    isRunning: boolean;
+  }) {
+    return prisma.activeTimer.upsert({
+      where: { userId },
+      create: {
+        userId,
+        projectId: data.projectId,
+        taskId: data.taskId,
+        description: data.description,
+        mode: data.mode || "countdown",
+        targetSeconds: data.targetSeconds || 7200,
+        elapsedSeconds: data.elapsedSeconds || 0,
+        remainingSeconds: data.remainingSeconds || 7200,
+        isRunning: data.isRunning,
+        lastStartedAt: data.isRunning ? new Date() : null,
+      },
+      update: {
+        projectId: data.projectId,
+        taskId: data.taskId,
+        description: data.description,
+        mode: data.mode,
+        targetSeconds: data.targetSeconds,
+        elapsedSeconds: data.elapsedSeconds,
+        remainingSeconds: data.remainingSeconds,
+        isRunning: data.isRunning,
+        lastStartedAt: data.isRunning ? new Date() : null,
+      },
+    });
+  }
+
+  async clearActiveTimer(userId: string) {
+    return prisma.activeTimer.deleteMany({
+      where: { userId },
+    });
+  }
 }
 
 export const timeService = new TimeService();
+

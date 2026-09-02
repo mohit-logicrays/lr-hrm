@@ -59,6 +59,20 @@ export const PERMISSIONS = {
   HOLIDAY_READ: "holiday:read",
   HOLIDAY_MANAGE: "holiday:manage",
 
+  // Announcements
+  ANNOUNCEMENT_READ: "announcement:read",
+  ANNOUNCEMENT_MANAGE: "announcement:manage",
+
+  // Policies
+  POLICY_READ: "policy:read",
+  POLICY_MANAGE: "policy:manage",
+
+  // Support
+  SUPPORT_CREATE: "support:create",
+  SUPPORT_READ_OWN: "support:read_own",
+  SUPPORT_READ_ALL: "support:read_all",
+  SUPPORT_MANAGE: "support:manage",
+
   // Requests / Analytics
   REQUEST_LOG_READ: "request:read",
 } as const;

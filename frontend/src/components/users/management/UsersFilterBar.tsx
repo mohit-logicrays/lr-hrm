@@ -3,8 +3,9 @@
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search } from "lucide-react";
+import { LayoutGrid, List, Search } from "lucide-react";
 import { Department, Role } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 interface UsersFilterBarProps {
   search: string;
@@ -18,6 +19,8 @@ interface UsersFilterBarProps {
   roles: Role[];
   departments: Department[];
   onClearFilters: () => void;
+  viewMode: "list" | "card";
+  onViewModeChange: (mode: "list" | "card") => void;
 }
 
 export function UsersFilterBar({
@@ -32,6 +35,8 @@ export function UsersFilterBar({
   roles,
   departments,
   onClearFilters,
+  viewMode,
+  onViewModeChange,
 }: UsersFilterBarProps) {
   const hasActiveFilters = Boolean(search || roleFilter || departmentFilter || statusFilter);
 
@@ -98,6 +103,38 @@ export function UsersFilterBar({
               Clear Filters
             </Button>
           )}
+
+          {/* List vs Card View Toggle */}
+          <div className="flex items-center rounded-lg border border-border-base bg-surface-subtle/50 p-0.5 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => onViewModeChange("list")}
+              className={cn(
+                "rounded-md p-1.5 transition-all cursor-pointer",
+                viewMode === "list"
+                  ? "bg-surface text-brand shadow-xs"
+                  : "text-text-tertiary hover:text-text-primary"
+              )}
+              title="List View"
+              aria-label="List View"
+            >
+              <List className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onViewModeChange("card")}
+              className={cn(
+                "rounded-md p-1.5 transition-all cursor-pointer",
+                viewMode === "card"
+                  ? "bg-surface text-brand shadow-xs"
+                  : "text-text-tertiary hover:text-text-primary"
+              )}
+              title="Card View"
+              aria-label="Card View"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </div>
     </Card>

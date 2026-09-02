@@ -30,3 +30,7 @@ export type { CriticalAlertsWidgetProps, CriticalAlert } from "./CriticalAlertsW
 
 export { ProjectStatusGridWidget } from "./ProjectStatusGridWidget";
 export type { ProjectStatusGridWidgetProps } from "./ProjectStatusGridWidget";
+
+export { SmartTimeTrackerWidget } from "./SmartTimeTrackerWidget";
+export type { SmartTimeTrackerWidgetProps } from "./SmartTimeTrackerWidget";
+

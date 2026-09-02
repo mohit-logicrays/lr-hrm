@@ -419,6 +419,21 @@ export interface CreateTimeLogPayload {
   status?: "DRAFT" | "SUBMITTED";
 }
 
+export interface ActiveTimerData {
+  id: string;
+  userId: string;
+  projectId?: string | null;
+  taskId?: string | null;
+  description?: string | null;
+  mode: "countdown" | "stopwatch" | string;
+  targetSeconds: number;
+  elapsedSeconds: number;
+  remainingSeconds: number;
+  isRunning: boolean;
+  lastStartedAt?: string | null;
+  updatedAt: string;
+}
+
 export interface TimesheetSummary {
   totalHours: number;
   billableHours: number;
@@ -1242,6 +1257,28 @@ export const api = {
   getTimesheetReports: (from?: string, to?: string) =>
     request<ItemResponse<TimesheetReports>>(`/api/v1/time/reports${qs({ from, to })}`),
 
+  // ---- Active Timer (Database Persisted) ----
+  getActiveTimer: () =>
+    request<ItemResponse<ActiveTimerData | null>>("/api/v1/time/active-timer"),
+
+  syncActiveTimer: (payload: {
+    projectId?: string | null;
+    taskId?: string | null;
+    description?: string | null;
+    mode?: string;
+    targetSeconds?: number;
+    elapsedSeconds?: number;
+    remainingSeconds?: number;
+    isRunning: boolean;
+  }) =>
+    request<ItemResponse<ActiveTimerData>>("/api/v1/time/active-timer", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  clearActiveTimer: () =>
+    request<void>("/api/v1/time/active-timer", { method: "DELETE" }),
+
   deleteTimeLog: (id: string) =>
     request<void>(`/api/v1/time/${id}`, { method: "DELETE" }),
 
@@ -1474,6 +1511,76 @@ export const api = {
 
   deleteSupportTicket: (id: string) =>
     request<void>(`/api/v1/support/${id}`, { method: "DELETE" }),
+
+  // ---- Notifications ----
+  listNotifications: (page = 1, pageSize = 20, unread = false) =>
+    request<ListResponse<NotificationItem> & { unreadCount: number }>(
+      `/api/v1/notifications${qs({ page, pageSize, unread })}`
+    ),
+
+  getNotificationUnreadCount: () =>
+    request<ItemResponse<{ unreadCount: number }>>("/api/v1/notifications/unread-count"),
+
+  markNotificationRead: (id: string) =>
+    request<ItemResponse<NotificationItem>>(`/api/v1/notifications/${id}/read`, {
+      method: "PATCH",
+    }),
+
+  markAllNotificationsRead: () =>
+    request<ItemResponse<void>>("/api/v1/notifications/read-all", {
+      method: "PATCH",
+    }),
+
+  deleteNotification: (id: string) =>
+    request<void>(`/api/v1/notifications/${id}`, { method: "DELETE" }),
+
+  clearAllNotifications: () =>
+    request<void>("/api/v1/notifications/clear-all", { method: "DELETE" }),
+
+  getNotificationPreferences: () =>
+    request<ItemResponse<NotificationPreference>>("/api/v1/notifications/preferences"),
+
+  updateNotificationPreferences: (payload: Partial<NotificationPreference>) =>
+    request<ItemResponse<NotificationPreference>>("/api/v1/notifications/preferences", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  savePushSubscription: (subscription: any) =>
+    request<ItemResponse<void>>("/api/v1/notifications/push-subscribe", {
+      method: "POST",
+      body: JSON.stringify({ subscription }),
+    }),
 };
+
+export interface NotificationItem {
+  id: string;
+  userId: string;
+  title: string;
+  message: string;
+  type: "leave" | "timesheet" | "project" | "task" | "attendance" | "user" | "support" | "system" | string;
+  referenceId?: string | null;
+  link?: string | null;
+  isRead: boolean;
+  metadata?: Record<string, any> | null;
+  createdAt: string;
+}
+
+export interface NotificationPreference {
+  id: string;
+  userId: string;
+  emailLeaves: boolean;
+  emailTimesheet: boolean;
+  emailProjects: boolean;
+  emailSupport: boolean;
+  pushLeaves: boolean;
+  pushTimesheet: boolean;
+  pushProjects: boolean;
+  pushSupport: boolean;
+  quietHoursStart?: string | null;
+  quietHoursEnd?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
 
 export { ApiError };

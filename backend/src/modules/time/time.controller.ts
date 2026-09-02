@@ -92,3 +92,23 @@ export const getTimeReports = asyncHandler(async (req: Request, res: Response) =
   const reports = await timeService.getReports(from, to);
   ApiResponse.success(res, 200, "Timesheet analytics & reports fetched", reports);
 });
+
+// ---------- Active Timer Endpoints ----------
+export const getActiveTimer = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) throw new AppError(401, "Not authenticated");
+  const timer = await timeService.getActiveTimer(req.user.id);
+  ApiResponse.success(res, 200, "Active timer fetched", timer);
+});
+
+export const syncActiveTimer = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) throw new AppError(401, "Not authenticated");
+  const timer = await timeService.syncActiveTimer(req.user.id, req.body);
+  ApiResponse.success(res, 200, "Active timer synced", timer);
+});
+
+export const clearActiveTimer = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) throw new AppError(401, "Not authenticated");
+  await timeService.clearActiveTimer(req.user.id);
+  ApiResponse.success(res, 200, "Active timer cleared");
+});
+

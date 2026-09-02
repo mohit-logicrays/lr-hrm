@@ -71,26 +71,67 @@ export class ProjectService {
     projectManagerId?: string;
     userId?: string;
     userRole?: string;
+    isSpecialRole?: boolean;
+    memberOnly?: boolean;
   }) {
     const page = params.page ?? 1;
     const limit = params.limit ?? 10;
 
-    const where: Prisma.ProjectWhereInput = {
-      deletedAt: null,
-      ...(params.status ? { status: params.status as any } : {}),
-      ...(params.priority ? { priority: params.priority as any } : {}),
-      ...(params.departmentId ? { departmentId: params.departmentId } : {}),
-      ...(params.primaryTeamId ? { primaryTeamId: params.primaryTeamId } : {}),
-      ...(params.projectManagerId ? { projectManagerId: params.projectManagerId } : {}),
-      ...((params as any).memberOnly && params.userId
-        ? {
+    const roleUpper = (params.userRole || "").toUpperCase();
+    const isGlobalViewer =
+      params.isSpecialRole ||
+      ["SUPERADMIN", "ADMIN", "HR", "HR_ADMIN"].includes(roleUpper);
+
+    let roleFilter: Prisma.ProjectWhereInput = {};
+
+    if (!isGlobalViewer && params.userId) {
+      if (roleUpper === "MANAGER" || roleUpper === "PROJECT_MANAGER") {
+        // PM sees projects where they are PM, Creator, or Member (or all if queried)
+        if (params.memberOnly) {
+          roleFilter = {
             OR: [
               { members: { some: { userId: params.userId } } },
               { projectManagerId: params.userId },
               { createdById: params.userId },
             ],
-          }
-        : {}),
+          };
+        }
+      } else if (roleUpper === "LEAD" || roleUpper === "TEAM_LEAD") {
+        // Team Lead sees projects where they are a member, or projects of their team
+        const userTeams = await prisma.teamMember.findMany({
+          where: { userId: params.userId },
+          select: { teamId: true },
+        });
+        const teamIds = userTeams.map((t) => t.teamId);
+
+        roleFilter = {
+          OR: [
+            { members: { some: { userId: params.userId } } },
+            { primaryTeamId: { in: teamIds } },
+            { projectManagerId: params.userId },
+            { createdById: params.userId },
+          ],
+        };
+      } else {
+        // Member / Associate: ONLY projects they are an assigned member of
+        roleFilter = {
+          OR: [
+            { members: { some: { userId: params.userId } } },
+            { projectManagerId: params.userId },
+            { createdById: params.userId },
+          ],
+        };
+      }
+    }
+
+    const where: Prisma.ProjectWhereInput = {
+      deletedAt: null,
+      ...roleFilter,
+      ...(params.status ? { status: params.status as any } : {}),
+      ...(params.priority ? { priority: params.priority as any } : {}),
+      ...(params.departmentId ? { departmentId: params.departmentId } : {}),
+      ...(params.primaryTeamId ? { primaryTeamId: params.primaryTeamId } : {}),
+      ...(params.projectManagerId ? { projectManagerId: params.projectManagerId } : {}),
       ...(params.search
         ? {
             OR: [

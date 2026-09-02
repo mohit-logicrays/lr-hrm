@@ -9,6 +9,7 @@ import { api, type TimeLog } from "@/lib/api";
 import {
   WelcomeBanner,
   StatCard,
+  SmartTimeTrackerWidget,
   PendingLeavesWidget,
   TeamQuickStatsWidget,
 } from "./widgets";
@@ -58,9 +59,12 @@ export function TeamLeadDashboard() {
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         <StatCard variants={item} icon={Users} label="Team Present" value="—" sub="Today" color="text-success" bg="bg-success/10" />
         <StatCard variants={item} icon={ClipboardList} label="Pending Approvals" value={pendingCount} sub="Leave requests" color="text-brand" bg="bg-brand/10" />
-        <StatCard variants={item} icon={Clock} label="My Hours Today" value={`${todayHours.toFixed(1)}h`} sub="Logged" color="text-info" bg="bg-info/10" />
-        <StatCard variants={item} icon={AlertTriangle} label="Overdue Tasks" value="—" sub="Team tasks" color="text-warning" bg="bg-warning/10" />
+        <StatCard variants={item} icon={Clock} label="Team Hours Logged" value={`${todayHours.toFixed(1)}h`} sub="Today" color="text-info" bg="bg-info/10" />
+        <StatCard variants={item} icon={AlertTriangle} label="Blocked Tasks" value="—" sub="Needs attention" color="text-warning" bg="bg-warning/10" />
       </div>
+
+      {/* Smart Time Tracker */}
+      <SmartTimeTrackerWidget variants={item} />
 
       {/* Widgets Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

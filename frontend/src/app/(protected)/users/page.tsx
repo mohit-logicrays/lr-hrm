@@ -31,6 +31,7 @@ import { ChevronLeft, ChevronRight, Users } from "lucide-react";
 import { UsersHeader } from "@/components/users/management/UsersHeader";
 import { UsersFilterBar } from "@/components/users/management/UsersFilterBar";
 import { UserTableRow } from "@/components/users/management/UserTableRow";
+import { UserCard } from "@/components/users/management/UserCard";
 
 function displayName(u: User): string {
   return (
@@ -52,6 +53,7 @@ export default function UsersPage() {
   const [roles, setRoles] = useState<Role[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
 
+  const [viewMode, setViewMode] = useState<"list" | "card">("list");
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
@@ -255,103 +257,186 @@ export default function UsersPage() {
           setStatusFilter("");
           setSearch("");
         }}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
       />
 
-      {/* Data Table Card */}
-      <Card className="border border-border-base bg-surface shadow-2xs rounded-xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-surface-subtle/50 hover:bg-surface-subtle/50">
-                <TableHead className="w-12 text-center">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    onChange={toggleSelectAll}
-                    className="rounded-xs border-border-base text-brand focus:ring-brand h-4 w-4 cursor-pointer"
-                  />
-                </TableHead>
-                <TableHead className="font-bold text-xs uppercase tracking-wider">Name &amp; Email</TableHead>
-                <TableHead className="font-bold text-xs uppercase tracking-wider">Role</TableHead>
-                <TableHead className="font-bold text-xs uppercase tracking-wider">Department</TableHead>
-                <TableHead className="font-bold text-xs uppercase tracking-wider">Status</TableHead>
-                <TableHead className="font-bold text-xs uppercase tracking-wider text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <TableRow key={i}>
-                    {Array.from({ length: 6 }).map((_, j) => (
-                      <TableCell key={j}>
-                        <Skeleton className="h-5 w-full" />
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))
-              ) : !result?.data || result.data.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-12 text-text-tertiary text-xs">
-                    <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    No user records found matching search or filter criteria.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                <AnimatePresence mode="popLayout">
-                  {result.data.map((u) => (
-                    <UserTableRow
-                      key={u.id}
-                      user={u}
-                      isSelected={selectedUserIds.includes(u.id)}
-                      canDelete={perms.delete}
-                      onToggleSelect={toggleSelectUser}
-                      onEdit={handleEdit}
-                      onResetPassword={handleResetPassword}
-                      onStatusChange={handleStatusChange}
-                      onDelete={handleDelete}
+      {/* Main Content Area: List View OR Card Grid View */}
+      {viewMode === "list" ? (
+        <Card className="border border-border-base bg-surface shadow-2xs rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-surface-subtle/50 hover:bg-surface-subtle/50">
+                  <TableHead className="w-12 text-center">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleSelectAll}
+                      className="rounded-xs border-border-base text-brand focus:ring-brand h-4 w-4 cursor-pointer"
                     />
-                  ))}
-                </AnimatePresence>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-
-        {/* Pagination Footer */}
-        {result?.pagination && (
-          <div className="px-4 py-3 border-t border-border-base bg-surface-subtle/30 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-            <div className="text-text-tertiary">
-              Showing <span className="font-bold text-text-primary">{result.data.length > 0 ? (page - 1) * 10 + 1 : 0}</span> to{" "}
-              <span className="font-bold text-text-primary">{Math.min(page * 10, result.pagination.total)}</span> of{" "}
-              <span className="font-bold text-text-primary">{result.pagination.total}</span> users
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <Button
-                variant="outline"
-                size="icon-sm"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1}
-                className="h-7 w-7"
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />
-              </Button>
-              <span className="px-2 font-mono font-medium text-text-secondary">
-                Page {page} of {result.pagination.totalPages || 1}
-              </span>
-              <Button
-                variant="outline"
-                size="icon-sm"
-                onClick={() => setPage((p) => Math.min(result.pagination.totalPages, p + 1))}
-                disabled={page >= (result.pagination.totalPages || 1)}
-                className="h-7 w-7"
-              >
-                <ChevronRight className="h-3.5 w-3.5" />
-              </Button>
-            </div>
+                  </TableHead>
+                  <TableHead className="font-bold text-xs uppercase tracking-wider">Name &amp; Email</TableHead>
+                  <TableHead className="font-bold text-xs uppercase tracking-wider">Role</TableHead>
+                  <TableHead className="font-bold text-xs uppercase tracking-wider">Department</TableHead>
+                  <TableHead className="font-bold text-xs uppercase tracking-wider">Status</TableHead>
+                  <TableHead className="font-bold text-xs uppercase tracking-wider text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      {Array.from({ length: 6 }).map((_, j) => (
+                        <TableCell key={j}>
+                          <Skeleton className="h-5 w-full" />
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                ) : !result?.data || result.data.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-12 text-text-tertiary text-xs">
+                      <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      No user records found matching search or filter criteria.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  <AnimatePresence mode="popLayout">
+                    {result.data.map((u) => (
+                      <UserTableRow
+                        key={u.id}
+                        user={u}
+                        isSelected={selectedUserIds.includes(u.id)}
+                        canDelete={perms.delete}
+                        onToggleSelect={toggleSelectUser}
+                        onEdit={handleEdit}
+                        onResetPassword={handleResetPassword}
+                        onStatusChange={handleStatusChange}
+                        onDelete={handleDelete}
+                      />
+                    ))}
+                  </AnimatePresence>
+                )}
+              </TableBody>
+            </Table>
           </div>
-        )}
-      </Card>
+
+          {/* Pagination Footer */}
+          {result?.pagination && (
+            <div className="px-4 py-3 border-t border-border-base bg-surface-subtle/30 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+              <div className="text-text-tertiary">
+                Showing <span className="font-bold text-text-primary">{result.data.length > 0 ? (page - 1) * 10 + 1 : 0}</span> to{" "}
+                <span className="font-bold text-text-primary">{Math.min(page * 10, result.pagination.total)}</span> of{" "}
+                <span className="font-bold text-text-primary">{result.pagination.total}</span> users
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="h-7 w-7"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </Button>
+                <span className="px-2 font-mono font-medium text-text-secondary">
+                  Page {page} of {result.pagination.totalPages || 1}
+                </span>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  onClick={() => setPage((p) => Math.min(result.pagination.totalPages, p + 1))}
+                  disabled={page >= (result.pagination.totalPages || 1)}
+                  className="h-7 w-7"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {loading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <Card key={i} className="p-5 border border-border-base bg-surface rounded-xl shadow-2xs space-y-3">
+                  <div className="flex justify-between items-center">
+                    <Skeleton className="h-4 w-4 rounded-xs" />
+                    <Skeleton className="h-4 w-16 rounded-full" />
+                  </div>
+                  <div className="flex flex-col items-center gap-2 py-2">
+                    <Skeleton className="h-16 w-16 rounded-full" />
+                    <Skeleton className="h-4 w-28 rounded" />
+                    <Skeleton className="h-3 w-36 rounded" />
+                  </div>
+                  <Skeleton className="h-8 w-full rounded" />
+                </Card>
+              ))}
+            </div>
+          ) : !result?.data || result.data.length === 0 ? (
+            <Card className="p-12 text-center text-xs text-text-tertiary border border-border-base bg-surface rounded-xl">
+              <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              No user records found matching search or filter criteria.
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              <AnimatePresence mode="popLayout">
+                {result.data.map((u) => (
+                  <UserCard
+                    key={u.id}
+                    user={u}
+                    isSelected={selectedUserIds.includes(u.id)}
+                    canDelete={perms.delete}
+                    onToggleSelect={toggleSelectUser}
+                    onEdit={handleEdit}
+                    onResetPassword={handleResetPassword}
+                    onStatusChange={handleStatusChange}
+                    onDelete={handleDelete}
+                  />
+                ))}
+              </AnimatePresence>
+            </div>
+          )}
+
+          {/* Card View Pagination */}
+          {result?.pagination && (
+            <Card className="px-4 py-3 border border-border-base bg-surface shadow-2xs rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+              <div className="text-text-tertiary">
+                Showing <span className="font-bold text-text-primary">{result.data.length > 0 ? (page - 1) * 10 + 1 : 0}</span> to{" "}
+                <span className="font-bold text-text-primary">{Math.min(page * 10, result.pagination.total)}</span> of{" "}
+                <span className="font-bold text-text-primary">{result.pagination.total}</span> users
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="h-7 w-7"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </Button>
+                <span className="px-2 font-mono font-medium text-text-secondary">
+                  Page {page} of {result.pagination.totalPages || 1}
+                </span>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  onClick={() => setPage((p) => Math.min(result.pagination.totalPages, p + 1))}
+                  disabled={page >= (result.pagination.totalPages || 1)}
+                  className="h-7 w-7"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </Card>
+          )}
+        </div>
+      )}
 
       {/* Password Reset Modal */}
       {resetPasswordModal && (

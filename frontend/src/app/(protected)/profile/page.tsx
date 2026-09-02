@@ -7,7 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { useAuth } from "@/providers/auth-provider";
-import { api, type User } from "@/lib/api";
+import { api, type User, apiFileUrl } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -377,7 +377,7 @@ export default function ProfilePage() {
           >
             <Avatar className="w-full h-full">
               <AvatarImage
-                src={user?.avatarUrl || undefined}
+                src={user?.avatarUrl ? apiFileUrl(user.avatarUrl) : undefined}
                 alt={displayName}
                 className="w-full h-full object-cover"
               />

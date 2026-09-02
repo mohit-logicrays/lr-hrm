@@ -156,6 +156,7 @@ export function AppSidebar() {
                     item={item}
                     active={pathname === item.href}
                     role={roleName}
+                    isSpecialRole={user?.isSpecialRole}
                   />
                 ))}
               </SidebarMenu>
@@ -227,15 +228,23 @@ function NavButton({
   item,
   active,
   role,
+  isSpecialRole,
 }: {
   item: NavItem;
   active: boolean;
   role?: string;
+  isSpecialRole?: boolean;
 }) {
   const isSuperadmin = (role || "").toUpperCase() === "SUPERADMIN";
+  const hasSpecialAccess = isSuperadmin || !!isSpecialRole;
 
   // Requests module MUST be visible ONLY to SUPERADMIN
   if (item.href === "/requests" && !isSuperadmin) {
+    return null;
+  }
+
+  // Roles module MUST be visible ONLY to Superadmin and Special Group (Founder, CEO, CTO, etc.)
+  if (item.href === "/roles" && !hasSpecialAccess) {
     return null;
   }
 
@@ -243,7 +252,7 @@ function NavButton({
   const canRead =
     perms.read || perms.read_all || perms.read_own || perms.type_read;
 
-  if (item.resource && !isSuperadmin && !canRead) {
+  if (item.resource && !hasSpecialAccess && !canRead) {
     return null;
   }
 

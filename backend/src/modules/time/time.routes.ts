@@ -27,6 +27,25 @@ router.post(
   timeController.submitWeek
 );
 
+// Active Timer Persistence Endpoints
+router.get(
+  "/active-timer",
+  requirePermission(PERMISSIONS.TIME_LOG_CREATE, PERMISSIONS.TIME_LOG_READ_OWN),
+  timeController.getActiveTimer
+);
+
+router.post(
+  "/active-timer",
+  requirePermission(PERMISSIONS.TIME_LOG_CREATE, PERMISSIONS.TIME_LOG_READ_OWN),
+  timeController.syncActiveTimer
+);
+
+router.delete(
+  "/active-timer",
+  requirePermission(PERMISSIONS.TIME_LOG_CREATE, PERMISSIONS.TIME_LOG_READ_OWN),
+  timeController.clearActiveTimer
+);
+
 // Reports Endpoint
 router.get(
   "/reports",

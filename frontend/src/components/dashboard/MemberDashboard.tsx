@@ -9,6 +9,7 @@ import { api, type TimeLog } from "@/lib/api";
 import {
   WelcomeBanner,
   StatCard,
+  SmartTimeTrackerWidget,
   LeaveBalanceWidget,
   AnnouncementsWidget,
   TodayOverviewWidget,
@@ -70,6 +71,20 @@ export function MemberDashboard() {
         <StatCard variants={item} icon={CheckSquare} label="Pending Tasks" value="—" sub="Open tasks" color="text-warning" bg="bg-warning/10" />
         <StatCard variants={item} icon={Activity} label="Attendance" value="Present" sub="Today" color="text-success" bg="bg-success/10" />
       </div>
+
+      {/* Smart Time Tracker Focus Widget */}
+      <SmartTimeTrackerWidget
+        variants={item}
+        onLogSaved={() => {
+          api
+            .listTimeLogs(1, 100, { from: today, to: today })
+            .then((res) => {
+              const logs: TimeLog[] = res.data || [];
+              setTodayHours(logs.reduce((s, l) => s + (l.hours || 0), 0));
+            })
+            .catch(() => {});
+        }}
+      />
 
       {/* Widgets Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

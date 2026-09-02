@@ -34,15 +34,9 @@ const profileSelect = {
       employmentType: true,
       workMode: true,
       workLocation: true,
-      reportingManager: {
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          email: true,
-          designation: true,
-        },
-      },
+      reportingManagerId: true,
+      projectManagerId: true,
+      shiftTiming: true,
     },
   },
   importantDates: {

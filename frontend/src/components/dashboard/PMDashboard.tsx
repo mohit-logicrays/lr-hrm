@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import {
   WelcomeBanner,
   StatCard,
+  SmartTimeTrackerWidget,
   ProjectProgressWidget,
 } from "./widgets";
 
@@ -69,6 +70,9 @@ export function PMDashboard() {
         <StatCard variants={item} icon={Clock} label="My Hours Today" value={`${todayHours.toFixed(1)}h`} sub="Logged" color="text-info" bg="bg-info/10" />
         <StatCard variants={item} icon={AlertTriangle} label="On Hold" value={onHoldCount} sub="Projects paused" color="text-error" bg="bg-error/10" />
       </div>
+
+      {/* Smart Time Tracker */}
+      <SmartTimeTrackerWidget variants={item} />
 
       {/* Projects Progress Widget */}
       <ProjectProgressWidget

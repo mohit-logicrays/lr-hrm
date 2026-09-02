@@ -20,6 +20,8 @@ export const listProjects = asyncHandler(async (req: Request, res: Response) => 
   const result = await projectService.list({
     ...query,
     userId: req.user?.id,
+    userRole: req.user?.roleName,
+    isSpecialRole: req.user?.isSpecialRole,
   });
   ApiResponse.success(res, 200, "Projects fetched", result.data, result.pagination);
 });

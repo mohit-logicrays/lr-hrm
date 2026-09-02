@@ -23,13 +23,12 @@ import Link from "next/link";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import {
   Search,
-  Bell,
   LogOut,
   User as UserIcon,
   X,
-  CheckCircle2,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { NotificationBellDropdown } from "@/components/notifications/NotificationBellDropdown";
 
 const PAGE_TITLES: Record<string, string> = {
   "/": "Dashboard",
@@ -127,36 +126,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Search className="h-5 w-5" />
             </button>
 
-            {/* Notification Menu */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  aria-label="Notifications"
-                  className="relative p-2 rounded-full hover:bg-surface-subtle text-text-secondary hover:text-brand transition-colors group focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-                >
-                  <Bell className="h-5 w-5 transition-transform group-hover:scale-105" />
-                  <span className="absolute top-1.5 right-1.5 flex h-2.5 w-2.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-brand"></span>
-                  </span>
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-80 rounded-xl p-0 shadow-xl border-border-base">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-border-base bg-surface-subtle/50">
-                  <span className="font-heading text-sm font-semibold text-text-primary">Notifications</span>
-                  <span className="text-xs bg-brand/10 text-brand px-2 py-0.5 rounded-full font-medium">2 New</span>
-                </div>
-                <div className="py-2 px-3 text-xs text-text-tertiary space-y-2">
-                  <div className="flex items-start gap-2 p-2 rounded-lg hover:bg-surface-subtle transition-colors cursor-pointer">
-                    <CheckCircle2 className="h-4 w-4 text-success shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-medium text-text-primary">Leave request approved</p>
-                      <p className="text-[11px] text-text-tertiary mt-0.5">Your casual leave for next Monday was approved.</p>
-                    </div>
-                  </div>
-                </div>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {/* Real-time Notification Bell & Drawer */}
+            <NotificationBellDropdown />
 
             {/* Theme Toggle (Dark / Light) */}
             <ThemeToggle />
