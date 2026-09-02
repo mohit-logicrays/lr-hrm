@@ -46,6 +46,11 @@ router.post(
   requirePermission(PERMISSIONS.LEAVE_REQUEST_CREATE),
   leaveController.createLeaveRequest
 );
+router.patch(
+  "/requests/:id",
+  requirePermission(PERMISSIONS.LEAVE_REQUEST_APPROVE),
+  leaveController.updateLeaveRequest
+);
 router.post(
   "/requests/:id/approve",
   requirePermission(PERMISSIONS.LEAVE_REQUEST_APPROVE),

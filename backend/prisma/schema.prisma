@@ -559,19 +559,30 @@ model LeaveBalance {
 }
 
 model LeaveRequest {
-  id          String             @id @default(cuid())
-  userId      String
-  leaveTypeId String
-  startDate   DateTime
-  endDate     DateTime
-  days        Float
-  reason      String?
-  status      LeaveRequestStatus @default(PENDING)
-  approvedBy  String?
-  approvedAt  DateTime?
-  cancelledBy String?
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  id               String             @id @default(cuid())
+  userId           String
+  leaveTypeId      String
+  startDate        DateTime
+  endDate          DateTime
+  days             Float
+  reason           String?
+  status           LeaveRequestStatus @default(PENDING)
+  isHalfDay        Boolean            @default(false)
+  halfDaySession   String?
+  tlApprovalStatus String             @default("PENDING")
+  tlApprovedBy     String?
+  tlApprovedAt     DateTime?
+  pmApprovalStatus String             @default("PENDING")
+  pmApprovedBy     String?
+  pmApprovedAt     DateTime?
+  hrApprovalStatus String             @default("PENDING")
+  hrApprovedBy     String?
+  hrApprovedAt     DateTime?
+  approvedBy       String?
+  approvedAt       DateTime?
+  cancelledBy      String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
 
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   leaveType LeaveType @relation(fields: [leaveTypeId], references: [id])

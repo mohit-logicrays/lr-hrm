@@ -428,6 +428,11 @@ export interface LeaveRequest {
   days: number;
   reason?: string | null;
   status: LeaveRequestStatus;
+  isHalfDay?: boolean;
+  halfDaySession?: "FIRST_HALF" | "SECOND_HALF" | null;
+  tlApprovalStatus?: string;
+  pmApprovalStatus?: string;
+  hrApprovalStatus?: string;
   approvedBy?: string | null;
   approvedAt?: string | null;
   createdAt?: string;
@@ -1043,20 +1048,30 @@ export const api = {
     startDate: string;
     endDate: string;
     reason?: string | null;
+    isHalfDay?: boolean;
+    halfDaySession?: "FIRST_HALF" | "SECOND_HALF";
+    targetUserId?: string;
   }) =>
     request<ItemResponse<LeaveRequest>>("/api/v1/leave/requests", {
       method: "POST",
       body: JSON.stringify(payload),
     }),
 
+  updateLeaveRequest: (id: string, payload: Partial<LeaveRequest>) =>
+    request<ItemResponse<LeaveRequest>>(`/api/v1/leave/requests/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
   approveLeaveRequest: (
     id: string,
     status: "APPROVED" | "REJECTED",
+    approvalRole: "TL" | "PM" | "HR" = "HR",
     reason?: string | null
   ) =>
     request<ItemResponse<LeaveRequest>>(`/api/v1/leave/requests/${id}/approve`, {
       method: "POST",
-      body: JSON.stringify({ status, reason }),
+      body: JSON.stringify({ status, approvalRole, reason }),
     }),
 
   cancelLeaveRequest: (id: string) =>

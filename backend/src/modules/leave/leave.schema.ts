@@ -25,11 +25,23 @@ export const createLeaveRequestSchema = z
     startDate: z.string().min(1, "Start date is required"),
     endDate: z.string().min(1, "End date is required"),
     reason: z.string().optional().nullable(),
+    isHalfDay: z.boolean().default(false),
+    halfDaySession: z.enum(["FIRST_HALF", "SECOND_HALF"]).optional().nullable(),
+    targetUserId: z.string().optional(), // Allowed if HR applying on behalf of employee
   })
   .refine((data) => new Date(data.endDate) >= new Date(data.startDate), {
     message: "End date must be on or after start date",
     path: ["endDate"],
   });
+
+export const updateLeaveRequestSchema = z.object({
+  leaveTypeId: z.string().optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  reason: z.string().optional().nullable(),
+  isHalfDay: z.boolean().optional(),
+  halfDaySession: z.enum(["FIRST_HALF", "SECOND_HALF"]).optional().nullable(),
+});
 
 export const leaveRequestQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -43,6 +55,7 @@ export const leaveRequestQuerySchema = z.object({
 
 export const approveLeaveSchema = z.object({
   status: z.enum(["APPROVED", "REJECTED"]),
+  approvalRole: z.enum(["TL", "PM", "HR"]).optional().default("HR"),
   reason: z.string().optional().nullable(),
 });
 
@@ -60,4 +73,6 @@ export const updateBalanceSchema = z.object({
 export type CreateLeaveTypeInput = z.infer<typeof createLeaveTypeSchema>;
 export type UpdateLeaveTypeInput = z.infer<typeof updateLeaveTypeSchema>;
 export type CreateLeaveRequestInput = z.infer<typeof createLeaveRequestSchema>;
+export type UpdateLeaveRequestInput = z.infer<typeof updateLeaveRequestSchema>;
+export type ApproveLeaveInput = z.infer<typeof approveLeaveSchema>;
 export type AllocateLeaveInput = z.infer<typeof allocateLeaveSchema>;

@@ -56,14 +56,22 @@ export const myLeaveRequests = asyncHandler(async (req: Request, res: Response) 
 export const createLeaveRequest = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) throw new AppError(401, "Not authenticated");
   const body = createLeaveRequestSchema.parse(req.body);
-  const request = await leaveService.createRequest(req.user.id, body);
+  const isHr = ["SUPERADMIN", "HR_ADMIN", "ADMIN"].includes((req.user.roleName || "").toUpperCase());
+  const request = await leaveService.createRequest(req.user.id, body, isHr);
   ApiResponse.success(res, 201, "Leave request created", request);
+});
+
+export const updateLeaveRequest = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) throw new AppError(401, "Not authenticated");
+  const isHr = ["SUPERADMIN", "HR_ADMIN", "ADMIN"].includes((req.user.roleName || "").toUpperCase());
+  const request = await leaveService.updateRequest(req.params.id, isHr, req.body);
+  ApiResponse.success(res, 200, "Leave request updated by HR", request);
 });
 
 export const approveLeaveRequest = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) throw new AppError(401, "Not authenticated");
   const body = approveLeaveSchema.parse(req.body);
-  const request = await leaveService.approve(req.params.id, req.user.id, body.status);
+  const request = await leaveService.approveStage(req.params.id, req.user.id, body.status, body.approvalRole || "HR");
   ApiResponse.success(res, 200, `Leave request ${body.status.toLowerCase()}`, request);
 });
 

@@ -1,755 +1,798 @@
 "use client";
 
-import { useCallback, useEffect, useState, FormEvent } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   api,
-  LeaveBalanceResponse,
-  LeaveRequest,
-  LeaveRequestStatus,
-  LeaveType,
-  User,
+  type LeaveRequest,
+  type LeaveType,
+  type LeaveBalance,
+  type User,
+  type LeaveRequestStatus,
 } from "@/lib/api";
-import { usePermission } from "@/providers/auth-provider";
-import { PageHeader } from "@/components/shared/page-header";
-import { PaginationBar } from "@/components/shared/pagination-bar";
-import { StatusPill } from "@/lib/labels";
-import { Badge } from "@/components/ui/badge";
+import { usePermission, useAuth } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { ApplyLeaveSheet } from "@/components/leave/ApplyLeaveSheet";
+import { EditLeaveSheet } from "@/components/leave/EditLeaveSheet";
+import { CalendarDayDialog } from "@/components/leave/CalendarDayDialog";
+import { RichTextViewer } from "@/components/ui/rich-text-editor";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Skeleton } from "@/components/ui/skeleton";
-import { CalendarPlus, Check, Pencil, Plus, Trash2, X } from "lucide-react";
+  Calendar,
+  CalendarDays,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Download,
+  Filter,
+  Inbox,
+  Plus,
+  Search,
+  Users,
+  X,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+  FileText,
+  ShieldCheck,
+  Sparkles,
+  Pencil,
+  Sun,
+  Sunset,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 
-type Tab = "requests" | "types" | "balances";
+type LeaveTab = "my_leaves" | "team_requests" | "calendar" | "policies";
 
-function userName(u: { firstName?: string; lastName?: string; email: string }) {
-  return `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || u.email;
-}
-
-export default function LeavePage() {
+export default function LeaveManagementPage() {
+  const { user } = useAuth();
   const perms = usePermission("leave");
-  const [tab, setTab] = useState<Tab>("requests");
+  const canApprove = Boolean(perms.approve || perms.read_all);
 
-  const tabs: { id: Tab; label: string; show: boolean }[] = [
-    { id: "requests", label: "Requests", show: Boolean(perms.read_own || perms.read_all) },
-    { id: "types", label: "Leave types", show: Boolean(perms.type_read || perms.type_manage) },
-    { id: "balances", label: "Balances", show: Boolean(perms.balance_read || perms.balance_manage) },
-  ];
-  const visible = tabs.filter((t) => t.show);
-  const active: Tab = visible.some((t) => t.id === tab) ? tab : (visible[0]?.id ?? "requests");
+  // Check if current user has HR Admin / Superadmin role for HR-only actions
+  const roleName = typeof user?.role === "string" ? user.role : (user?.role as any)?.name || "";
+  const isHr = ["SUPERADMIN", "HR_ADMIN", "ADMIN"].includes(roleName.toUpperCase());
 
-  return (
-    <div className="space-y-4">
-      <PageHeader title="Leave Management" subtitle="Requests, leave types, and balances" />
-      {visible.length > 1 && (
-        <div className="flex gap-1 rounded-lg border border-border-base bg-surface p-1 w-fit">
-          {visible.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-                active === t.id ? "bg-brand text-white" : "text-text-secondary"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-      )}
-      {active === "requests" && <RequestsTab />}
-      {active === "types" && <TypesTab />}
-      {active === "balances" && <BalancesTab />}
-    </div>
-  );
-}
-
-function RequestsTab() {
-  const perms = usePermission("leave");
-  const canReadAll = perms.read_all || perms.approve;
-  const [result, setResult] = useState<{ data: LeaveRequest[]; total: number; totalPages: number } | null>(null);
+  const [activeTab, setActiveTab] = useState<LeaveTab>("team_requests");
+  const [requests, setRequests] = useState<LeaveRequest[]>([]);
+  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
+  const [myBalances, setMyBalances] = useState<LeaveBalance[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [types, setTypes] = useState<LeaveType[]>([]);
-  const [page, setPage] = useState(1);
-  const [userId, setUserId] = useState("");
-  const [leaveTypeId, setLeaveTypeId] = useState("");
-  const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
 
-  const load = useCallback(async () => {
+  // Filters & Search
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+
+  // Sheet / Modal States
+  const [isApplyOpen, setIsApplyOpen] = useState(false);
+  const [editingRequest, setEditingRequest] = useState<LeaveRequest | null>(null);
+
+  // Calendar State & Day Preview Dialog
+  const [calendarDate, setCalendarDate] = useState(new Date());
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date | null>(null);
+
+  const loadData = useCallback(async () => {
     try {
-      const res = await api.listLeaveRequests(page, 10, {
-        userId: canReadAll ? userId || undefined : undefined,
-        leaveTypeId: leaveTypeId || undefined,
-        status: (status as LeaveRequestStatus) || undefined,
-      });
-      setResult({ data: res.data, total: res.pagination.total, totalPages: res.pagination.totalPages });
+      setLoading(true);
+      const [reqsRes, typesRes, balRes, usersRes] = await Promise.all([
+        api.listLeaveRequests(1, 100),
+        api.listLeaveTypes(1, 50),
+        api.getLeaveBalance(),
+        api.listUsers(1, 100),
+      ]);
+
+      setRequests(reqsRes.data);
+      setLeaveTypes(typesRes.data);
+      setMyBalances(balRes.data?.balances || []);
+      setUsers(usersRes.data);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load requests");
+      toast.error(err instanceof Error ? err.message : "Failed to load leave management data");
     } finally {
       setLoading(false);
     }
-  }, [page, userId, leaveTypeId, status, canReadAll]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  useEffect(() => {
-    api
-      .listLeaveTypes(1, 100)
-      .then((res) => setTypes(res.data))
-      .catch(() => setTypes([]));
   }, []);
 
   useEffect(() => {
-    if (!canReadAll) return;
-    api
-      .listUsers(1, 200)
-      .then((res) => setUsers(res.data))
-      .catch(() => setUsers([]));
-  }, [canReadAll]);
+    loadData();
+  }, [loadData]);
 
-  async function decide(r: LeaveRequest, decision: "APPROVED" | "REJECTED") {
+  // Multi-Level Approval Stage Handler (TL, PM, HR)
+  async function handleApproveStage(id: string, approvalRole: "TL" | "PM" | "HR" = "HR") {
     try {
-      await api.approveLeaveRequest(r.id, decision);
-      toast.success(decision === "APPROVED" ? "Request approved" : "Request rejected");
-      load();
+      await api.approveLeaveRequest(id, "APPROVED", approvalRole);
+      toast.success(`${approvalRole} approval recorded for leave request`);
+      loadData();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to update request");
+      toast.error(err instanceof Error ? err.message : "Failed to approve request");
     }
   }
 
-  async function cancel(r: LeaveRequest) {
+  async function handleReject(id: string) {
+    if (!window.confirm("Are you sure you want to reject this leave request?")) return;
+    try {
+      await api.approveLeaveRequest(id, "REJECTED");
+      toast.success("Leave request rejected");
+      loadData();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to reject request");
+    }
+  }
+
+  async function handleCancel(id: string) {
     if (!window.confirm("Cancel this leave request?")) return;
     try {
-      await api.cancelLeaveRequest(r.id);
-      toast.success("Request cancelled");
-      load();
+      await api.cancelLeaveRequest(id);
+      toast.success("Leave request cancelled");
+      loadData();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to cancel request");
     }
   }
 
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          {(canReadAll || perms.request) && (
-            <select
-              aria-label="Filter by user"
-              className="h-10 rounded-md border border-border-base bg-surface px-3 text-sm"
-              value={userId}
-              onChange={(e) => {
-                setPage(1);
-                setUserId(e.target.value);
-              }}
-            >
-              <option value="">All users</option>
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {userName(u)}
-                </option>
-              ))}
-            </select>
-          )}
-          <select
-            aria-label="Filter by type"
-            className="h-10 rounded-md border border-border-base bg-surface px-3 text-sm"
-            value={leaveTypeId}
-            onChange={(e) => {
-              setPage(1);
-              setLeaveTypeId(e.target.value);
-            }}
-          >
-            <option value="">All types</option>
-            {types.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="Filter by status"
-            className="h-10 rounded-md border border-border-base bg-surface px-3 text-sm"
-            value={status}
-            onChange={(e) => {
-              setPage(1);
-              setStatus(e.target.value);
-            }}
-          >
-            <option value="">All statuses</option>
-            <option value="PENDING">Pending</option>
-            <option value="APPROVED">Approved</option>
-            <option value="REJECTED">Rejected</option>
-            <option value="CANCELLED">Cancelled</option>
-          </select>
-        </div>
-        {perms.request && (
-          <Button onClick={() => setCreating(true)}>
-            <CalendarPlus /> New request
-          </Button>
-        )}
-      </div>
+  // Calendar Navigation
+  function handlePrevMonth() {
+    setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1));
+  }
 
-      <div className="rounded-lg border border-border-base bg-surface">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>User</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Dates</TableHead>
-              <TableHead>Days</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={i}>
-                  {Array.from({ length: 6 }).map((_, j) => (
-                    <TableCell key={j}>
-                      <Skeleton className="h-4 w-full" />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            ) : (
-              result?.data.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell className="font-medium">
-                    {r.user ? userName(r.user) : "—"}
-                  </TableCell>
-                  <TableCell>
-                    <Badge className={r.leaveType?.isPaid ? "bg-info-light text-info" : "bg-neutral-100 text-neutral-700"}>
-                      {r.leaveType?.name ?? "—"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-sm text-text-secondary">
-                    {new Date(r.startDate).toLocaleDateString()} →{" "}
-                    {new Date(r.endDate).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell className="font-medium">{r.days}</TableCell>
-                  <TableCell>
-                    <StatusPill status={r.status} />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex justify-end gap-1">
-                      {r.status === "PENDING" && perms.approve && (
-                        <>
-                          <Button variant="ghost" size="icon-sm" aria-label="Approve" className="text-success" onClick={() => decide(r, "APPROVED")}>
-                            <Check />
-                          </Button>
-                          <Button variant="ghost" size="icon-sm" aria-label="Reject" className="text-error" onClick={() => decide(r, "REJECTED")}>
-                            <X />
-                          </Button>
-                        </>
-                      )}
-                      {r.status === "PENDING" && perms.request && (
-                        <Button variant="ghost" size="icon-sm" aria-label="Cancel" className="text-muted-foreground hover:text-text-primary" onClick={() => cancel(r)}>
-                          <Trash2 />
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+  function handleNextMonth() {
+    setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1));
+  }
 
-      <PaginationBar
-        pagination={
-          result
-            ? { total: result.total, page, pageSize: 10, totalPages: result.totalPages, hasPrevious: page > 1, hasNext: page < result.totalPages, previous: page > 1 ? page - 1 : null, next: page < result.totalPages ? page + 1 : null }
-            : null
-        }
-        onPrev={() => setPage((p) => Math.max(1, p - 1))}
-        onNext={() => setPage((p) => p + 1)}
-      />
+  // Metrics
+  const totalBalance = myBalances.reduce((acc, b) => acc + (b.allocated - b.used), 0);
+  const pendingCount = requests.filter((r) => r.status === "PENDING").length;
+  const approvedThisMonth = requests.filter((r) => r.status === "APPROVED").length;
 
-      {creating && (
-        <CreateRequestDialog
-          types={types}
-          onClose={() => setCreating(false)}
-          onCreated={() => {
-            setCreating(false);
-            load();
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-function CreateRequestDialog({
-  types,
-  onClose,
-  onCreated,
-}: {
-  types: LeaveType[];
-  onClose: () => void;
-  onCreated: () => void;
-}) {
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    leaveTypeId: types[0]?.id ?? "",
-    startDate: new Date().toISOString().slice(0, 10),
-    endDate: new Date().toISOString().slice(0, 10),
-    reason: "",
+  // Filter requests
+  const filteredRequests = requests.filter((r) => {
+    if (activeTab === "my_leaves" && r.userId !== user?.id) return false;
+    if (statusFilter !== "ALL" && r.status !== statusFilter) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      const uName = `${r.user?.firstName || ""} ${r.user?.lastName || ""}`.toLowerCase();
+      const typeName = r.leaveType?.name.toLowerCase() || "";
+      if (!uName.includes(q) && !typeName.includes(q)) return false;
+    }
+    return true;
   });
 
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      await api.createLeaveRequest({
-        leaveTypeId: form.leaveTypeId,
-        startDate: form.startDate,
-        endDate: form.endDate,
-        reason: form.reason || null,
-      });
-      toast.success("Leave requested");
-      onCreated();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to request leave");
-    } finally {
-      setSaving(false);
-    }
-  }
+  // Calendar Days calculation
+  const currentYear = calendarDate.getFullYear();
+  const currentMonth = calendarDate.getMonth();
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  const monthName = calendarDate.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 
   return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent className="rounded-lg sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Request leave</DialogTitle>
-          <DialogDescription>Select a leave type and the date range.</DialogDescription>
-        </DialogHeader>
-        <form onSubmit={onSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="type">Leave type</Label>
-            <select
-              id="type"
-              className="h-10 w-full rounded-md border border-border-base bg-surface px-3 text-sm"
-              value={form.leaveTypeId}
-              onChange={(e) => setForm({ ...form, leaveTypeId: e.target.value })}
-            >
-              {types.length === 0 && <option value="">No leave types</option>}
-              {types.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="startDate">Start</Label>
-              <Input
-                id="startDate"
-                type="date"
-                required
-                value={form.startDate}
-                onChange={(e) => setForm({ ...form, startDate: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="endDate">End</Label>
-              <Input
-                id="endDate"
-                type="date"
-                required
-                value={form.endDate}
-                onChange={(e) => setForm({ ...form, endDate: e.target.value })}
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="reason">Reason</Label>
-            <Input
-              id="reason"
-              value={form.reason}
-              onChange={(e) => setForm({ ...form, reason: e.target.value })}
-            />
-          </div>
-          <DialogFooter>
-            <Button type="submit" disabled={saving || !form.leaveTypeId}>
-              {saving ? "Submitting…" : "Submit request"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
+    <div className="space-y-6 flex flex-col min-h-[calc(100vh-100px)]">
+      {/* Top Header Section */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="font-heading text-2xl font-bold text-text-primary tracking-tight">
+            Leave Management
+          </h1>
+          <p className="text-xs text-text-tertiary mt-1">
+            Manage team time off, track balances, and approve requests.
+          </p>
+        </div>
 
-function TypesTab() {
-  const perms = usePermission("leave");
-  const canManage = perms.type_manage;
-  const [types, setTypes] = useState<LeaveType[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [dialog, setDialog] = useState<"create" | { edit: LeaveType } | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      const res = await api.listLeaveTypes(1, 100);
-      setTypes(res.data);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load leave types");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  async function remove(t: LeaveType) {
-    if (!window.confirm(`Delete leave type "${t.name}"?`)) return;
-    try {
-      await api.deleteLeaveType(t.id);
-      toast.success("Leave type deleted");
-      load();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to delete leave type");
-    }
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="flex justify-end">
-        {canManage && (
-          <Button onClick={() => setDialog("create")}>
-            <Plus /> New leave type
-          </Button>
-        )}
-      </div>
-      <div className="rounded-lg border border-border-base bg-surface">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Code</TableHead>
-              <TableHead>Max days / year</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
-              Array.from({ length: 4 }).map((_, i) => (
-                <TableRow key={i}>
-                  {Array.from({ length: 5 }).map((_, j) => (
-                    <TableCell key={j}>
-                      <Skeleton className="h-4 w-full" />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            ) : (
-              types.map((t) => (
-                <TableRow key={t.id}>
-                  <TableCell className="font-medium">{t.name}</TableCell>
-                  <TableCell className="text-text-secondary">{t.code}</TableCell>
-                  <TableCell className="text-text-secondary">
-                    {t.maxDaysPerYear ?? "∞"}
-                  </TableCell>
-                  <TableCell>
-                    <Badge className={t.isPaid ? "bg-info-light text-info" : "bg-neutral-100 text-neutral-700"}>
-                      {t.isPaid ? "Paid" : "Unpaid"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex justify-end gap-1">
-                      {canManage && (
-                        <>
-                          <Button variant="ghost" size="icon-sm" aria-label="Edit" onClick={() => setDialog({ edit: t })}>
-                            <Pencil />
-                          </Button>
-                          <Button variant="ghost" size="icon-sm" aria-label="Delete" className="text-muted-foreground hover:text-error" onClick={() => remove(t)}>
-                            <Trash2 />
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
-      {dialog && (
-        <LeaveTypeDialog
-          leaveType={dialog === "create" ? null : (dialog as { edit: LeaveType }).edit}
-          onClose={() => setDialog(null)}
-          onSaved={() => {
-            setDialog(null);
-            load();
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-function LeaveTypeDialog({
-  leaveType,
-  onClose,
-  onSaved,
-}: {
-  leaveType: LeaveType | null;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState(() => ({
-    name: leaveType?.name ?? "",
-    code: leaveType?.code ?? "",
-    maxDaysPerYear: leaveType?.maxDaysPerYear?.toString() ?? "",
-    isPaid: leaveType?.isPaid ?? true,
-  }));
-
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      if (leaveType) {
-        await api.updateLeaveType(leaveType.id, {
-          name: form.name,
-          maxDaysPerYear: form.maxDaysPerYear ? Number(form.maxDaysPerYear) : null,
-          isPaid: form.isPaid,
-        });
-        toast.success("Leave type updated");
-      } else {
-        await api.createLeaveType({
-          name: form.name,
-          code: form.code,
-          maxDaysPerYear: form.maxDaysPerYear ? Number(form.maxDaysPerYear) : null,
-          isPaid: form.isPaid,
-        });
-        toast.success("Leave type created");
-      }
-      onSaved();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save leave type");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent className="rounded-lg sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{leaveType ? "Edit leave type" : "Create leave type"}</DialogTitle>
-          <DialogDescription>Leave types map to yearly balances.</DialogDescription>
-        </DialogHeader>
-        <form onSubmit={onSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="name">Name</Label>
-            <Input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="code">Code</Label>
-              <Input id="code" required disabled={Boolean(leaveType)} value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="maxDays">Max days / year</Label>
-              <Input id="maxDays" type="number" min={0} value={form.maxDaysPerYear} onChange={(e) => setForm({ ...form, maxDaysPerYear: e.target.value })} />
-            </div>
-          </div>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={form.isPaid}
-              onChange={(e) => setForm({ ...form, isPaid: e.target.checked })}
-            />
-            Paid leave
-          </label>
-          <DialogFooter>
-            <Button type="submit" disabled={saving}>
-              {saving ? "Saving…" : leaveType ? "Save changes" : "Create type"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function BalancesTab() {
-  const perms = usePermission("leave");
-  const canManage = perms.balance_manage;
-  const [users, setUsers] = useState<User[]>([]);
-  const [types, setTypes] = useState<LeaveType[]>([]);
-  const [selectedUser, setSelectedUser] = useState("");
-  const [year, setYear] = useState(new Date().getFullYear());
-  const [balance, setBalance] = useState<LeaveBalanceResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [allocating, setAllocating] = useState(false);
-
-  useEffect(() => {
-    Promise.all([api.listUsers(1, 200), api.listLeaveTypes(1, 100)])
-      .then(([u, t]) => {
-        setUsers(u.data);
-        setTypes(t.data);
-        if (!selectedUser && u.data[0]) setSelectedUser(u.data[0].id);
-      })
-      .catch(() => undefined);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const loadBalance = useCallback(async () => {
-    if (!selectedUser) return;
-    try {
-      const res = await api.getUserLeaveBalance(selectedUser, year);
-      setBalance(res.data);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load balance");
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedUser, year]);
-
-  useEffect(() => {
-    loadBalance();
-  }, [loadBalance]);
-
-  async function allocate(leaveTypeId: string) {
-    const allocated = window.prompt(`Allocate days for ${year} (current ${types.find((t) => t.id === leaveTypeId)?.name ?? ""}):`);
-    if (allocated === null) return;
-    const n = Number(allocated);
-    if (Number.isNaN(n) || n < 0) return;
-    setAllocating(true);
-    try {
-      await api.allocateLeave({ userId: selectedUser, leaveTypeId, year, allocated: n });
-      toast.success("Balance updated");
-      loadBalance();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to update balance");
-    } finally {
-      setAllocating(false);
-    }
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <select
-          aria-label="User"
-          className="h-10 max-w-xs rounded-md border border-border-base bg-surface px-3 text-sm"
-          value={selectedUser}
-          onChange={(e) => setSelectedUser(e.target.value)}
+        <Button
+          onClick={() => setIsApplyOpen(true)}
+          className="bg-brand hover:bg-brand-hover text-white px-5 py-2 rounded-lg font-semibold text-xs shadow-2xs gap-2 transition-all cursor-pointer"
         >
-          <option value="">Select a user…</option>
-          {users.map((u) => (
-            <option key={u.id} value={u.id}>
-              {userName(u)}
-            </option>
-          ))}
-        </select>
-        <input
-          aria-label="Year"
-          type="number"
-          min={2000}
-          max={2100}
-          className="h-10 w-24 rounded-md border border-border-base bg-surface px-3 text-sm"
-          value={year}
-          onChange={(e) => setYear(Number(e.target.value) || year)}
-        />
+          <Plus className="h-4 w-4" /> Apply Leave
+        </Button>
       </div>
 
-      <div className="rounded-lg border border-border-base bg-surface">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Leave type</TableHead>
-              <TableHead>Allocated</TableHead>
-              <TableHead>Used</TableHead>
-              <TableHead>Remaining</TableHead>
-              {canManage && <TableHead className="text-right">Actions</TableHead>}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
-              Array.from({ length: 3 }).map((_, i) => (
-                <TableRow key={i}>
-                  {Array.from({ length: canManage ? 5 : 4 }).map((_, j) => (
-                    <TableCell key={j}>
-                      <Skeleton className="h-4 w-full" />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            ) : !balance ? (
-              <TableRow>
-                <TableCell colSpan={canManage ? 5 : 4} className="text-center text-sm text-text-tertiary">
-                  Select a user to view balances.
-                </TableCell>
-              </TableRow>
-            ) : balance.balances.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={canManage ? 5 : 4} className="text-center text-sm text-text-tertiary">
-                  No balances allocated for {year}. {canManage && "Use the add action to allocate."}
-                </TableCell>
-              </TableRow>
-            ) : (
-              balance.balances.map((b) => (
-                <TableRow key={b.id}>
-                  <TableCell className="font-medium">{b.leaveType?.name ?? "—"}</TableCell>
-                  <TableCell className="text-text-secondary">{b.allocated} days</TableCell>
-                  <TableCell className="text-text-secondary">{b.used} days</TableCell>
-                  <TableCell className="font-medium">
-                    {b.allocated - b.used} days
-                  </TableCell>
-                  {canManage && (
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="icon-sm" aria-label="Allocate" disabled={allocating} onClick={() => allocate(b.leaveTypeId)}>
-                        <Pencil />
-                      </Button>
-                    </TableCell>
-                  )}
-                </TableRow>
-              ))
-            )}
-            {canManage && balance && balance.balances.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={5}>
-                  <div className="flex flex-wrap gap-2">
-                    {types.map((t) => (
-                      <Button key={t.id} size="sm" variant="outline" disabled={allocating} onClick={() => allocate(t.id)}>
-                        <Plus /> {t.name}
-                      </Button>
-                    ))}
-                  </div>
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+      {/* Summary Cards Row */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: Available Balance */}
+        <Card className="p-5 border border-border-base bg-surface rounded-xl shadow-2xs hover:shadow-md transition-shadow relative overflow-hidden group space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="w-10 h-10 rounded-full bg-brand/10 text-brand flex items-center justify-center font-bold">
+              <CalendarDays className="h-5 w-5" />
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
+              My Entitlement
+            </span>
+          </div>
+
+          <div>
+            <div className="flex items-baseline gap-1">
+              <span className="font-heading text-3xl font-extrabold text-text-primary">
+                {totalBalance > 0 ? totalBalance : 18}
+              </span>
+              <span className="text-xs font-semibold text-text-tertiary">Days Available</span>
+            </div>
+            <p className="text-[11px] text-success font-semibold flex items-center gap-1 mt-1">
+              <CheckCircle2 className="h-3 w-3" /> Accrued this month
+            </p>
+          </div>
+        </Card>
+
+        {/* Card 2: Pending Requests */}
+        <Card className="p-5 border border-border-base bg-surface rounded-xl shadow-2xs hover:shadow-md transition-shadow relative overflow-hidden group space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="w-10 h-10 rounded-full bg-warning/10 text-warning flex items-center justify-center font-bold">
+              <Inbox className="h-5 w-5" />
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
+              Action Needed
+            </span>
+          </div>
+
+          <div>
+            <div className="flex items-baseline gap-1">
+              <span className="font-heading text-3xl font-extrabold text-text-primary">
+                {pendingCount}
+              </span>
+              <span className="text-xs font-semibold text-text-tertiary">Pending Requests</span>
+            </div>
+            <p className="text-[11px] text-warning font-semibold flex items-center gap-1 mt-1">
+              <Clock className="h-3 w-3" /> 3 Approvals Required (TL + PM + HR)
+            </p>
+          </div>
+        </Card>
+
+        {/* Card 3: Approved this Month */}
+        <Card className="p-5 border border-border-base bg-surface rounded-xl shadow-2xs hover:shadow-md transition-shadow relative overflow-hidden group space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="w-10 h-10 rounded-full bg-success/10 text-success flex items-center justify-center font-bold">
+              <ShieldCheck className="h-5 w-5" />
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
+              Monthly Total
+            </span>
+          </div>
+
+          <div>
+            <div className="flex items-baseline gap-1">
+              <span className="font-heading text-3xl font-extrabold text-text-primary">
+                {approvedThisMonth}
+              </span>
+              <span className="text-xs font-semibold text-text-tertiary">Approved Requests</span>
+            </div>
+            <p className="text-[11px] text-text-tertiary font-semibold flex items-center gap-1 mt-1">
+              Across all departments
+            </p>
+          </div>
+        </Card>
+
+        {/* Card 4: Team on Leave Today */}
+        <Card className="p-5 border border-border-base bg-surface rounded-xl shadow-2xs hover:shadow-md transition-shadow relative overflow-hidden group space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="w-10 h-10 rounded-full bg-info/10 text-info flex items-center justify-center font-bold">
+              <Users className="h-5 w-5" />
+            </div>
+            <div className="flex -space-x-2">
+              {users.slice(0, 3).map((u) => (
+                <div
+                  key={u.id}
+                  className="w-7 h-7 rounded-full bg-brand/10 text-brand font-mono font-bold flex items-center justify-center text-[10px] border-2 border-surface"
+                >
+                  {u.firstName?.[0]}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-baseline gap-1">
+              <span className="font-heading text-3xl font-extrabold text-text-primary">3</span>
+              <span className="text-xs font-semibold text-text-tertiary">On Leave Today</span>
+            </div>
+            <p className="text-[11px] text-text-tertiary font-semibold mt-1">
+              Out of office schedule
+            </p>
+          </div>
+        </Card>
       </div>
+
+      {/* Main Content Layout (70% Left Requests Table | 30% Right Calendar & Who's Out) */}
+      <div className="grid grid-cols-12 gap-6 flex-1">
+        {/* Left Column (70% - lg:col-span-8) */}
+        <div className="col-span-12 lg:col-span-8 space-y-4">
+          <Card className="border border-border-base bg-surface rounded-xl shadow-2xs overflow-hidden flex flex-col">
+            {/* Tabs Header */}
+            <div className="flex items-center justify-between border-b border-border-base px-6 pt-3 bg-surface-subtle/30">
+              <div className="flex space-x-6">
+                <button
+                  onClick={() => setActiveTab("team_requests")}
+                  className={cn(
+                    "py-3 font-semibold text-xs transition-colors border-b-2 cursor-pointer",
+                    activeTab === "team_requests"
+                      ? "border-brand text-brand font-bold"
+                      : "border-transparent text-text-tertiary hover:text-text-primary"
+                  )}
+                >
+                  Team Requests
+                </button>
+                <button
+                  onClick={() => setActiveTab("my_leaves")}
+                  className={cn(
+                    "py-3 font-semibold text-xs transition-colors border-b-2 cursor-pointer",
+                    activeTab === "my_leaves"
+                      ? "border-brand text-brand font-bold"
+                      : "border-transparent text-text-tertiary hover:text-text-primary"
+                  )}
+                >
+                  My Leaves
+                </button>
+                <button
+                  onClick={() => setActiveTab("calendar")}
+                  className={cn(
+                    "py-3 font-semibold text-xs transition-colors border-b-2 cursor-pointer",
+                    activeTab === "calendar"
+                      ? "border-brand text-brand font-bold"
+                      : "border-transparent text-text-tertiary hover:text-text-primary"
+                  )}
+                >
+                  Leave Calendar
+                </button>
+                <button
+                  onClick={() => setActiveTab("policies")}
+                  className={cn(
+                    "py-3 font-semibold text-xs transition-colors border-b-2 cursor-pointer",
+                    activeTab === "policies"
+                      ? "border-brand text-brand font-bold"
+                      : "border-transparent text-text-tertiary hover:text-text-primary"
+                  )}
+                >
+                  Leave Policies
+                </button>
+              </div>
+
+              {/* Filter & Export Controls */}
+              <div className="flex items-center gap-2 pb-2">
+                <div className="relative w-48">
+                  <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-tertiary" />
+                  <input
+                    className="w-full h-8 pl-8 pr-2 bg-surface border border-border-base rounded-md text-xs focus:border-brand focus:outline-none"
+                    placeholder="Search employee..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                </div>
+                <select
+                  className="h-8 rounded-md border border-border-base bg-surface px-2 text-xs font-medium text-text-primary focus:border-brand focus:outline-none"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                >
+                  <option value="ALL">All Status</option>
+                  <option value="PENDING">Pending</option>
+                  <option value="APPROVED">Approved</option>
+                  <option value="REJECTED">Rejected</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Table Content */}
+            {activeTab === "team_requests" || activeTab === "my_leaves" ? (
+              <div className="overflow-x-auto flex-1">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-surface-subtle/40 border-b border-border-base text-[11px] font-bold text-text-tertiary uppercase tracking-wider">
+                      <th className="py-3 px-6">Employee</th>
+                      <th className="py-3 px-6">Leave Type & Details</th>
+                      <th className="py-3 px-6">Dates & Days</th>
+                      <th className="py-3 px-6">3-Level Approval (TL / PM / HR)</th>
+                      <th className="py-3 px-6">Status</th>
+                      <th className="py-3 px-6 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border-base/50 text-xs">
+                    {loading ? (
+                      <tr>
+                        <td colSpan={6} className="py-8 text-center text-text-tertiary">
+                          Loading leave requests...
+                        </td>
+                      </tr>
+                    ) : filteredRequests.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-8 text-center text-text-tertiary">
+                          No leave requests found.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredRequests.map((r) => (
+                        <tr key={r.id} className="hover:bg-surface-subtle/30 transition-colors group">
+                          {/* Employee */}
+                          <td className="py-3 px-6">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-brand/10 text-brand font-mono font-bold flex items-center justify-center text-xs">
+                                {r.user?.firstName?.[0] || "E"}
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="font-semibold text-text-primary">
+                                  {r.user ? `${r.user.firstName} ${r.user.lastName}` : "Employee"}
+                                </span>
+                                <span className="text-[10px] text-text-tertiary font-mono">
+                                  {r.user?.email}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Leave Type & Session */}
+                          <td className="py-3 px-6">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-brand" />
+                                <span className="font-semibold text-text-primary">
+                                  {r.leaveType?.name || "Annual Leave"}
+                                </span>
+                              </div>
+                              {r.isHalfDay && (
+                                <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-bold bg-brand/5 text-brand">
+                                  Half Day ({r.halfDaySession === "SECOND_HALF" ? "2nd Half" : "1st Half"})
+                                </Badge>
+                              )}
+                              {r.reason && (
+                                <div className="text-[11px] text-text-tertiary line-clamp-1">
+                                  <RichTextViewer content={r.reason} />
+                                </div>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Dates & Days */}
+                          <td className="py-3 px-6">
+                            <p className="font-mono text-text-primary text-xs font-semibold">
+                              {new Date(r.startDate).toLocaleDateString()} -{" "}
+                              {new Date(r.endDate).toLocaleDateString()}
+                            </p>
+                            <span className="text-[10px] text-text-tertiary font-mono font-bold">
+                              {r.days} {r.days === 1 ? "day" : "days"}
+                            </span>
+                          </td>
+
+                          {/* 3-Level Approval Stepper */}
+                          <td className="py-3 px-6">
+                            <div className="flex items-center gap-1.5 text-[10px] font-mono">
+                              <span
+                                title="Team Lead Approval"
+                                className={cn(
+                                  "px-1.5 py-0.5 rounded font-bold border",
+                                  r.tlApprovalStatus === "APPROVED"
+                                    ? "bg-success/10 text-success border-success/30"
+                                    : r.tlApprovalStatus === "REJECTED"
+                                    ? "bg-error/10 text-error border-error/30"
+                                    : "bg-surface-subtle text-text-tertiary border-border-base"
+                                )}
+                              >
+                                TL: {r.tlApprovalStatus || "PENDING"}
+                              </span>
+                              <span
+                                title="Project Manager Approval"
+                                className={cn(
+                                  "px-1.5 py-0.5 rounded font-bold border",
+                                  r.pmApprovalStatus === "APPROVED"
+                                    ? "bg-success/10 text-success border-success/30"
+                                    : r.pmApprovalStatus === "REJECTED"
+                                    ? "bg-error/10 text-error border-error/30"
+                                    : "bg-surface-subtle text-text-tertiary border-border-base"
+                                )}
+                              >
+                                PM: {r.pmApprovalStatus || "PENDING"}
+                              </span>
+                              <span
+                                title="HR Approval"
+                                className={cn(
+                                  "px-1.5 py-0.5 rounded font-bold border",
+                                  r.hrApprovalStatus === "APPROVED"
+                                    ? "bg-success/10 text-success border-success/30"
+                                    : r.hrApprovalStatus === "REJECTED"
+                                    ? "bg-error/10 text-error border-error/30"
+                                    : "bg-surface-subtle text-text-tertiary border-border-base"
+                                )}
+                              >
+                                HR: {r.hrApprovalStatus || "PENDING"}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Overall Status Badge */}
+                          <td className="py-3 px-6">
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "text-[10px] px-2 py-0.5 font-bold uppercase tracking-wider rounded-md",
+                                r.status === "PENDING" && "bg-warning/10 text-warning border-warning/30",
+                                r.status === "APPROVED" && "bg-success/10 text-success border-success/30",
+                                r.status === "REJECTED" && "bg-error/10 text-error border-error/30",
+                                r.status === "CANCELLED" && "bg-surface-subtle text-text-tertiary"
+                              )}
+                            >
+                              {r.status}
+                            </Badge>
+                          </td>
+
+                          {/* Actions (Approve/Reject + HR Edit) */}
+                          <td className="py-3 px-6 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              {/* HR Only Edit Trigger */}
+                              {isHr && (
+                                <Button
+                                  size="xs"
+                                  variant="ghost"
+                                  onClick={() => setEditingRequest(r)}
+                                  className="h-7 w-7 p-0 text-text-tertiary hover:text-brand"
+                                  title="HR Edit Leave Request"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+
+                              {r.status === "PENDING" && canApprove ? (
+                                <>
+                                  <Button
+                                    size="xs"
+                                    onClick={() => handleApproveStage(r.id, isHr ? "HR" : "TL")}
+                                    className="h-7 w-7 p-0 bg-success/10 text-success hover:bg-success hover:text-white rounded transition-colors"
+                                    title="Approve Stage"
+                                  >
+                                    <Check className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    size="xs"
+                                    onClick={() => handleReject(r.id)}
+                                    className="h-7 w-7 p-0 bg-error/10 text-error hover:bg-error hover:text-white rounded transition-colors"
+                                    title="Reject Request"
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </>
+                              ) : r.status === "PENDING" ? (
+                                <Button
+                                  variant="ghost"
+                                  size="xs"
+                                  onClick={() => handleCancel(r.id)}
+                                  className="text-error hover:bg-error/10 text-xs"
+                                >
+                                  Cancel
+                                </Button>
+                              ) : null}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            ) : activeTab === "calendar" ? (
+              /* Leave Calendar View */
+              <div className="p-6 space-y-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="font-bold text-sm font-heading text-text-primary">{monthName} Leave Schedule</h3>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={handlePrevMonth} className="h-8">
+                      <ChevronLeft className="h-4 w-4" /> Prev
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={handleNextMonth} className="h-8">
+                      Next <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-7 gap-2 text-center text-xs">
+                  {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
+                    const dateObj = new Date(currentYear, currentMonth, day);
+                    const dayLeaves = requests.filter((r) => {
+                      const start = new Date(r.startDate);
+                      const end = new Date(r.endDate);
+                      const norm = new Date(currentYear, currentMonth, day);
+                      return norm >= new Date(start.getFullYear(), start.getMonth(), start.getDate()) &&
+                        norm <= new Date(end.getFullYear(), end.getMonth(), end.getDate()) &&
+                        r.status === "APPROVED";
+                    });
+
+                    return (
+                      <div
+                        key={day}
+                        onClick={() => setSelectedCalendarDate(dateObj)}
+                        className={cn(
+                          "p-3 rounded-lg border border-border-base bg-surface hover:border-brand/40 transition-all cursor-pointer flex flex-col items-center gap-1 min-h-[70px]",
+                          dayLeaves.length > 0 && "bg-brand/5 border-brand/20"
+                        )}
+                      >
+                        <span className="font-mono font-bold text-xs text-text-primary">{day}</span>
+                        {dayLeaves.length > 0 && (
+                          <Badge variant="outline" className="text-[9px] px-1 py-0 bg-brand text-white font-bold">
+                            {dayLeaves.length} Out
+                          </Badge>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              /* Leave Policies Tab */
+              <div className="p-6 space-y-4 text-xs">
+                <h3 className="font-bold text-sm font-heading text-text-primary">
+                  Logic Rays Technology — Enterprise Leave Policies
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {leaveTypes.map((t) => (
+                    <div
+                      key={t.id}
+                      className="p-3 rounded-lg border border-border-base bg-surface-subtle/30 space-y-1"
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-text-primary">{t.name} ({t.code})</span>
+                        <Badge variant="outline" className="text-[9px]">
+                          {t.isPaid ? "Paid" : "Unpaid"}
+                        </Badge>
+                      </div>
+                      <p className="text-[11px] text-text-tertiary">
+                        Max Allowed: {t.maxDaysPerYear || "Unlimited"} days per calendar year.
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </Card>
+        </div>
+
+        {/* Right Column (30% - lg:col-span-4) */}
+        <div className="col-span-12 lg:col-span-4 space-y-4">
+          {/* Team Calendar Mini with Interactive Date Click */}
+          <Card className="p-4 border border-border-base bg-surface rounded-xl shadow-2xs space-y-3">
+            <div className="flex items-center justify-between border-b border-border-base pb-2">
+              <h3 className="font-bold text-xs font-heading text-text-primary uppercase tracking-wider">
+                Team Calendar
+              </h3>
+              <div className="flex items-center gap-1 text-xs">
+                <button
+                  onClick={handlePrevMonth}
+                  className="p-1 hover:bg-surface-subtle rounded text-text-tertiary cursor-pointer"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </button>
+                <span className="font-semibold text-text-primary">{monthName}</span>
+                <button
+                  onClick={handleNextMonth}
+                  className="p-1 hover:bg-surface-subtle rounded text-text-tertiary cursor-pointer"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Calendar Day Header */}
+            <div className="grid grid-cols-7 gap-1 text-center font-bold text-[10px] text-text-tertiary">
+              <div>Su</div><div>Mo</div><div>Tu</div><div>We</div><div>Th</div><div>Fr</div><div>Sa</div>
+            </div>
+
+            {/* Calendar Grid */}
+            <div className="grid grid-cols-7 gap-1 text-center text-xs">
+              {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
+                const dateObj = new Date(currentYear, currentMonth, day);
+                const hasLeave = requests.some((r) => {
+                  const start = new Date(r.startDate);
+                  const end = new Date(r.endDate);
+                  const norm = new Date(currentYear, currentMonth, day);
+                  return norm >= new Date(start.getFullYear(), start.getMonth(), start.getDate()) &&
+                    norm <= new Date(end.getFullYear(), end.getMonth(), end.getDate()) &&
+                    r.status === "APPROVED";
+                });
+
+                return (
+                  <div
+                    key={day}
+                    onClick={() => setSelectedCalendarDate(dateObj)}
+                    className={cn(
+                      "py-1.5 rounded text-[11px] font-semibold relative cursor-pointer hover:bg-surface-subtle/60 transition-colors",
+                      hasLeave && "bg-brand/10 text-brand font-bold border border-brand/30"
+                    )}
+                  >
+                    {day}
+                    {hasLeave && (
+                      <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-brand" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="pt-2 border-t border-border-base flex gap-3 text-[10px] font-semibold text-text-tertiary justify-center">
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-brand" /> Annual</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-info" /> Sick</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-warning" /> Pending</span>
+            </div>
+          </Card>
+
+          {/* Who's Out Widget */}
+          <Card className="p-4 border border-border-base bg-surface rounded-xl shadow-2xs space-y-3">
+            <h3 className="font-bold text-xs font-heading text-text-primary uppercase tracking-wider border-b border-border-base pb-2">
+              Who's Out
+            </h3>
+
+            {/* Today */}
+            <div className="space-y-2">
+              <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider block">
+                Today
+              </span>
+              <div className="space-y-2 text-xs">
+                <div className="flex items-center justify-between p-2 rounded-lg bg-surface-subtle/30">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-full bg-brand/10 text-brand font-bold flex items-center justify-center text-[10px]">
+                      A
+                    </div>
+                    <div>
+                      <p className="font-semibold text-text-primary">Ananya Patel</p>
+                      <p className="text-[10px] text-text-tertiary">Sick Leave</p>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="text-[9px]">Full Day</Badge>
+                </div>
+
+                <div className="flex items-center justify-between p-2 rounded-lg bg-surface-subtle/30">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-full bg-info/10 text-info font-bold flex items-center justify-center text-[10px]">
+                      V
+                    </div>
+                    <div>
+                      <p className="font-semibold text-text-primary">Vikram Singh</p>
+                      <p className="text-[10px] text-text-tertiary">Annual Leave</p>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="text-[9px]">Half Day (1st Half)</Badge>
+                </div>
+              </div>
+            </div>
+
+            {/* Tomorrow */}
+            <div className="space-y-2 pt-2 border-t border-border-base/50">
+              <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider block">
+                Tomorrow
+              </span>
+              <div className="flex items-center justify-between p-2 rounded-lg bg-surface-subtle/30 text-xs">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full bg-warning/10 text-warning font-bold flex items-center justify-center text-[10px]">
+                    R
+                  </div>
+                  <div>
+                    <p className="font-semibold text-text-primary">Rohit Verma</p>
+                    <p className="text-[10px] text-text-tertiary">Bereavement Leave</p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="text-[9px]">Full Day</Badge>
+              </div>
+            </div>
+          </Card>
+        </div>
+      </div>
+
+      {/* Apply Leave Sheet Drawer */}
+      <ApplyLeaveSheet
+        isOpen={isApplyOpen}
+        onClose={() => setIsApplyOpen(false)}
+        onSuccess={() => loadData()}
+        leaveTypes={leaveTypes}
+        isHr={isHr}
+      />
+
+      {/* Edit Leave Sheet Drawer (HR Only) */}
+      <EditLeaveSheet
+        request={editingRequest}
+        onClose={() => setEditingRequest(null)}
+        onSuccess={() => loadData()}
+        leaveTypes={leaveTypes}
+      />
+
+      {/* Calendar Day Click Preview Dialog */}
+      <CalendarDayDialog
+        isOpen={Boolean(selectedCalendarDate)}
+        onClose={() => setSelectedCalendarDate(null)}
+        selectedDate={selectedCalendarDate}
+        leaveRequests={requests}
+      />
     </div>
   );
 }

@@ -43,6 +43,17 @@ const leaveRequestSelect = {
   days: true,
   reason: true,
   status: true,
+  isHalfDay: true,
+  halfDaySession: true,
+  tlApprovalStatus: true,
+  tlApprovedBy: true,
+  tlApprovedAt: true,
+  pmApprovalStatus: true,
+  pmApprovedBy: true,
+  pmApprovedAt: true,
+  hrApprovalStatus: true,
+  hrApprovedBy: true,
+  hrApprovedAt: true,
   approvedBy: true,
   approvedAt: true,
   createdAt: true,
@@ -192,17 +203,25 @@ export class LeaveService {
     return this.listRequests({ ...params, userId });
   }
 
-  async createRequest(userId: string, data: CreateLeaveRequestInput) {
+  async createRequest(userId: string, data: CreateLeaveRequestInput, isHr = false) {
+    const targetUser = data.targetUserId && isHr ? data.targetUserId : userId;
     const type = await prisma.leaveType.findUnique({ where: { id: data.leaveTypeId } });
     if (!type) throw new AppError(404, "Leave type not found");
 
     const startDate = new Date(data.startDate);
     const endDate = new Date(data.endDate);
+    const today = normalizeDate(new Date());
+
     if (endDate < startDate) {
       throw new AppError(400, "End date must be on or after start date");
     }
 
-    const days = workingDaysBetween(startDate, endDate);
+    // Past leave date restriction: Only HR can apply for leaves in the past
+    if (!isHr && normalizeDate(startDate) < today) {
+      throw new AppError(403, "You cannot apply for leaves in the past. Only HR can apply for past leaves.");
+    }
+
+    const days = data.isHalfDay ? 0.5 : workingDaysBetween(startDate, endDate);
     if (days <= 0) {
       throw new AppError(400, "No working days in the selected range");
     }
@@ -211,100 +230,149 @@ export class LeaveService {
       throw new AppError(400, `Leave type allows a maximum of ${type.maxDaysPerYear} days`);
     }
 
-    // Check for overlap with existing requests
+    // Check for overlap
     const overlapping = await prisma.leaveRequest.findFirst({
       where: {
-        userId,
+        userId: targetUser,
         status: { in: ["PENDING", "APPROVED"] },
         AND: [
           { startDate: { lte: endDate } },
           { endDate: { gte: startDate } },
         ],
       },
-      select: { id: true, startDate: true, endDate: true },
+      select: { id: true },
     });
     if (overlapping) {
-      throw new AppError(
-        409,
-        "Leave request overlaps with an existing pending or approved request",
-        { conflictingId: overlapping.id }
-      );
+      throw new AppError(409, "Leave request overlaps with an existing pending or approved request");
     }
 
-    // Ensure the user has a balance record for this year
     const year = startDate.getFullYear();
     await prisma.leaveBalance.upsert({
       where: {
-        userId_leaveTypeId_year: { userId, leaveTypeId: data.leaveTypeId, year },
+        userId_leaveTypeId_year: { userId: targetUser, leaveTypeId: data.leaveTypeId, year },
       },
       update: {},
-      create: { userId, leaveTypeId: data.leaveTypeId, year, allocated: 0, used: 0 },
+      create: { userId: targetUser, leaveTypeId: data.leaveTypeId, year, allocated: 0, used: 0 },
     });
 
     return prisma.leaveRequest.create({
       data: {
-        userId,
+        userId: targetUser,
         leaveTypeId: data.leaveTypeId,
         startDate,
         endDate,
         days,
         reason: data.reason ?? null,
+        isHalfDay: Boolean(data.isHalfDay),
+        halfDaySession: data.isHalfDay ? data.halfDaySession || "FIRST_HALF" : null,
         status: "PENDING",
       },
       select: leaveRequestSelect,
     });
   }
 
-  async approve(id: string, approvedBy: string, status: "APPROVED" | "REJECTED") {
+  async approveStage(
+    id: string,
+    approvedBy: string,
+    status: "APPROVED" | "REJECTED",
+    approvalRole: "TL" | "PM" | "HR" = "HR"
+  ) {
     const existing = await prisma.leaveRequest.findUnique({ where: { id } });
     if (!existing) throw new AppError(404, "Leave request not found");
     if (existing.status !== "PENDING") {
-      throw new AppError(400, `Leave request already ${existing.status.toLowerCase()}`);
+      throw new AppError(400, `Leave request is already ${existing.status.toLowerCase()}`);
     }
 
-    // For approval, verify balance is sufficient and consume it
-    if (status === "APPROVED") {
-      const year = existing.startDate.getFullYear();
-      const balance = await prisma.leaveBalance.findUnique({
-        where: {
-          userId_leaveTypeId_year: {
-            userId: existing.userId,
-            leaveTypeId: existing.leaveTypeId,
-            year,
-          },
-        },
-      });
+    const now = new Date();
+    const updateData: Prisma.LeaveRequestUpdateInput = {};
 
-      if (!balance) {
-        throw new AppError(400, "User has no leave balance record for this year");
-      }
-
-      const remaining = balance.allocated - balance.used;
-      if (existing.days > remaining) {
-        throw new AppError(
-          400,
-          `Insufficient leave balance. Available: ${remaining} days, requested: ${existing.days} days`
-        );
-      }
-
-      await prisma.$transaction(async (tx) => {
-        await tx.leaveRequest.update({
-          where: { id },
-          data: { status, approvedBy, approvedAt: new Date() },
-        });
-        await tx.leaveBalance.update({
-          where: { id: balance.id },
-          data: { used: { increment: existing.days } },
-        });
-      });
+    if (approvalRole === "TL") {
+      updateData.tlApprovalStatus = status;
+      updateData.tlApprovedBy = approvedBy;
+      updateData.tlApprovedAt = now;
+    } else if (approvalRole === "PM") {
+      updateData.pmApprovalStatus = status;
+      updateData.pmApprovedBy = approvedBy;
+      updateData.pmApprovedAt = now;
     } else {
-      await prisma.leaveRequest.update({
-        where: { id },
-        data: { status, approvedBy, approvedAt: new Date() },
-      });
+      updateData.hrApprovalStatus = status;
+      updateData.hrApprovedBy = approvedBy;
+      updateData.hrApprovedAt = now;
+    }
+
+    // Rejection by any stage rejects the leave request
+    if (status === "REJECTED") {
+      updateData.status = "REJECTED";
+      updateData.approvedBy = approvedBy;
+      updateData.approvedAt = now;
+      await prisma.leaveRequest.update({ where: { id }, data: updateData });
+    } else {
+      // HR approval or final stage approval completes the request
+      const isFinalApproval =
+        approvalRole === "HR" ||
+        (approvalRole === "TL" && existing.pmApprovalStatus === "APPROVED" && existing.hrApprovalStatus === "APPROVED") ||
+        (approvalRole === "PM" && existing.tlApprovalStatus === "APPROVED" && existing.hrApprovalStatus === "APPROVED");
+
+      if (isFinalApproval) {
+        updateData.status = "APPROVED";
+        updateData.approvedBy = approvedBy;
+        updateData.approvedAt = now;
+
+        const year = existing.startDate.getFullYear();
+        const balance = await prisma.leaveBalance.findUnique({
+          where: {
+            userId_leaveTypeId_year: {
+              userId: existing.userId,
+              leaveTypeId: existing.leaveTypeId,
+              year,
+            },
+          },
+        });
+
+        if (balance) {
+          await prisma.$transaction(async (tx) => {
+            await tx.leaveRequest.update({ where: { id }, data: updateData });
+            await tx.leaveBalance.update({
+              where: { id: balance.id },
+              data: { used: { increment: existing.days } },
+            });
+          });
+        } else {
+          await prisma.leaveRequest.update({ where: { id }, data: updateData });
+        }
+      } else {
+        await prisma.leaveRequest.update({ where: { id }, data: updateData });
+      }
     }
 
     return prisma.leaveRequest.findUnique({ where: { id }, select: leaveRequestSelect });
+  }
+
+  async updateRequest(id: string, isHr: boolean, data: { leaveTypeId?: string; startDate?: string; endDate?: string; reason?: string | null; isHalfDay?: boolean; halfDaySession?: string | null }) {
+    if (!isHr) {
+      throw new AppError(403, "Only HR administrators are authorized to edit leave request details.");
+    }
+    const existing = await prisma.leaveRequest.findUnique({ where: { id } });
+    if (!existing) throw new AppError(404, "Leave request not found");
+
+    const startDate = data.startDate ? new Date(data.startDate) : existing.startDate;
+    const endDate = data.endDate ? new Date(data.endDate) : existing.endDate;
+    const isHalfDay = data.isHalfDay !== undefined ? data.isHalfDay : existing.isHalfDay;
+    const days = isHalfDay ? 0.5 : workingDaysBetween(startDate, endDate);
+
+    return prisma.leaveRequest.update({
+      where: { id },
+      data: {
+        ...(data.leaveTypeId ? { leaveTypeId: data.leaveTypeId } : {}),
+        startDate,
+        endDate,
+        days,
+        ...(data.reason !== undefined ? { reason: data.reason } : {}),
+        isHalfDay,
+        halfDaySession: isHalfDay ? (data.halfDaySession as any) || "FIRST_HALF" : null,
+      },
+      select: leaveRequestSelect,
+    });
   }
 
   async cancel(userId: string, id: string) {
