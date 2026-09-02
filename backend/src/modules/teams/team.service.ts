@@ -120,7 +120,7 @@ export class TeamService {
     if (!existing) throw new AppError(404, "Team not found");
 
     const projectCount = await prisma.project.count({
-      where: { teamId: id, deletedAt: null },
+      where: { primaryTeamId: id, deletedAt: null },
     });
     if (projectCount > 0) {
       throw new AppError(409, "Cannot delete team with projects. Unassign projects first.");

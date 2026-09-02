@@ -219,7 +219,7 @@ export interface TeamDetail extends Team {
   members: TeamMemberRow[];
 }
 
-// ---------- Projects ----------
+// ---------- Projects & Tasks ----------
 
 export type ProjectStatus =
   | "PLANNING"
@@ -228,34 +228,148 @@ export type ProjectStatus =
   | "COMPLETED"
   | "ARCHIVED";
 
+export type ProjectPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+
+export type TaskStatus =
+  | "BACKLOG"
+  | "TODO"
+  | "IN_PROGRESS"
+  | "IN_REVIEW"
+  | "DONE"
+  | "CANCELLED";
+
+export type TaskPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+
+export type MilestoneStatus = "UPCOMING" | "IN_PROGRESS" | "COMPLETED" | "DELAYED";
+
+export type ProjectMemberRole = "MEMBER" | "LEAD" | "PROJECT_MANAGER" | "VIEWER";
+
+export interface ProjectUserSummary {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  avatarUrl?: string | null;
+  designation?: string | null;
+}
+
 export interface Project {
   id: string;
   name: string;
   code?: string | null;
   description?: string | null;
   status: ProjectStatus;
-  teamId?: string | null;
-  team?: { id: string; name: string } | null;
-  createdBy?: string | null;
+  priority?: ProjectPriority;
+  startDate?: string | null;
+  endDate?: string | null;
+  actualEndDate?: string | null;
+  progress?: number;
+  departmentId?: string | null;
+  primaryTeamId?: string | null;
+  projectManagerId?: string | null;
+  createdById?: string | null;
+  budget?: number | null;
+  clientName?: string | null;
+  isBillable?: boolean;
+  category?: string | null;
+  visibility?: string;
   createdAt?: string;
   updatedAt?: string;
-  _count?: { members: number; timeLogs: number };
+  department?: { id: string; name: string; code: string } | null;
+  primaryTeam?: { id: string; name: string } | null;
+  projectManager?: ProjectUserSummary | null;
+  createdBy?: ProjectUserSummary | null;
+  members?: ProjectMemberRow[];
+  _count?: {
+    members?: number;
+    tasks?: number;
+    milestones?: number;
+    files?: number;
+    timeLogs?: number;
+  };
 }
 
 export interface ProjectMemberRow {
   id: string;
-  projectRole?: string | null;
-  user: {
+  roleInProject?: ProjectMemberRole | string;
+  joinedAt?: string;
+  user: ProjectUserSummary;
+}
+
+export interface Task {
+  id: string;
+  projectId: string;
+  taskCode?: string | null;
+  title: string;
+  description?: string | null;
+  status: TaskStatus;
+  priority: TaskPriority;
+  assigneeId?: string | null;
+  reporterId?: string | null;
+  startDate?: string | null;
+  dueDate?: string | null;
+  completedAt?: string | null;
+  estimatedHours?: number | null;
+  actualHours?: number | null;
+  parentTaskId?: string | null;
+  order?: number;
+  labels?: string[] | null;
+  isCompleted?: boolean;
+  assignee?: ProjectUserSummary | null;
+  reporter?: ProjectUserSummary | null;
+  subtasks?: Array<{
     id: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-    designation: string | null;
-  };
+    title: string;
+    isCompleted?: boolean;
+    assignee?: ProjectUserSummary | null;
+  }>;
+  _count?: { comments: number };
+}
+
+export interface Milestone {
+  id: string;
+  projectId: string;
+  title: string;
+  description?: string | null;
+  dueDate?: string | null;
+  completedAt?: string | null;
+  status: MilestoneStatus;
+  progress: number;
+}
+
+export interface ProjectActivity {
+  id: string;
+  projectId: string;
+  taskId?: string | null;
+  action: string;
+  metadata?: Record<string, unknown> | null;
+  createdAt: string;
+  user?: ProjectUserSummary | null;
+}
+
+export interface TaskComment {
+  id: string;
+  taskId: string;
+  content: string;
+  reactions?: Record<string, unknown> | null;
+  createdAt: string;
+  user: ProjectUserSummary;
 }
 
 export interface ProjectDetail extends Project {
   members: ProjectMemberRow[];
+  tasks: Task[];
+  milestones: Milestone[];
+  activities: ProjectActivity[];
+  files: Array<{
+    id: string;
+    fileName: string;
+    fileUrl: string;
+    fileType?: string | null;
+    size?: number | null;
+    uploadedAt: string;
+    uploadedBy?: ProjectUserSummary | null;
+  }>;
 }
 
 // ---------- Time ----------
@@ -695,16 +809,28 @@ export const api = {
       method: "DELETE",
     }),
 
-  // ---- Projects ----
+  // ---- Projects & Tasks ----
   listProjects: (
     page = 1,
     pageSize = 10,
     search = "",
     status?: ProjectStatus,
-    teamId?: string
+    priority?: ProjectPriority,
+    departmentId?: string,
+    primaryTeamId?: string,
+    projectManagerId?: string
   ) =>
     request<ListResponse<Project>>(
-      `/api/v1/projects${qs({ page, pageSize, search, status, teamId })}`
+      `/api/v1/projects${qs({
+        page,
+        pageSize,
+        search,
+        status,
+        priority,
+        departmentId,
+        primaryTeamId,
+        projectManagerId,
+      })}`
     ),
 
   getProject: (id: string) =>
@@ -715,7 +841,19 @@ export const api = {
     code?: string | null;
     description?: string | null;
     status?: ProjectStatus;
-    teamId?: string | null;
+    priority?: ProjectPriority;
+    startDate?: string | null;
+    endDate?: string | null;
+    departmentId?: string | null;
+    primaryTeamId?: string | null;
+    projectManagerId?: string | null;
+    budget?: number | null;
+    clientName?: string | null;
+    isBillable?: boolean;
+    category?: string | null;
+    visibility?: string;
+    initialMembers?: Array<{ userId: string; roleInProject: string }>;
+    initialMilestones?: Array<{ title: string; description?: string | null; dueDate?: string | null }>;
   }) =>
     request<ItemResponse<Project>>("/api/v1/projects", {
       method: "POST",
@@ -724,13 +862,7 @@ export const api = {
 
   updateProject: (
     id: string,
-    payload: {
-      name?: string;
-      code?: string | null;
-      description?: string | null;
-      status?: ProjectStatus;
-      teamId?: string | null;
-    }
+    payload: Record<string, unknown>
   ) =>
     request<ItemResponse<Project>>(`/api/v1/projects/${id}`, {
       method: "PATCH",
@@ -740,14 +872,83 @@ export const api = {
   deleteProject: (id: string) =>
     request<void>(`/api/v1/projects/${id}`, { method: "DELETE" }),
 
-  addProjectMember: (payload: {
-    projectId: string;
-    userId: string;
-    projectRole?: string | null;
-  }) =>
-    request<ItemResponse<ProjectMemberRow>>("/api/v1/projects/members", {
+  addProjectMember: (
+    projectId: string,
+    payload: { userId: string; roleInProject?: string }
+  ) =>
+    request<ItemResponse<ProjectMemberRow>>(`/api/v1/projects/${projectId}/members`, {
       method: "POST",
       body: JSON.stringify(payload),
+    }),
+
+  removeProjectMember: (projectId: string, userId: string) =>
+    request<void>(`/api/v1/projects/${projectId}/members/${userId}`, {
+      method: "DELETE",
+    }),
+
+  listTasks: (projectId: string) =>
+    request<ItemResponse<Task[]>>(`/api/v1/projects/${projectId}/tasks`),
+
+  createTask: (
+    projectId: string,
+    payload: {
+      title: string;
+      description?: string | null;
+      taskCode?: string | null;
+      status?: TaskStatus;
+      priority?: TaskPriority;
+      assigneeId?: string | null;
+      dueDate?: string | null;
+      startDate?: string | null;
+      estimatedHours?: number | null;
+      parentTaskId?: string | null;
+      labels?: string[] | null;
+    }
+  ) =>
+    request<ItemResponse<Task>>(`/api/v1/projects/${projectId}/tasks`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateTaskStatus: (taskId: string, status: TaskStatus) =>
+    request<ItemResponse<Task>>(`/api/v1/projects/tasks/${taskId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
+
+  updateTask: (taskId: string, payload: Record<string, unknown>) =>
+    request<ItemResponse<Task>>(`/api/v1/projects/tasks/${taskId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteTask: (taskId: string) =>
+    request<void>(`/api/v1/projects/tasks/${taskId}`, {
+      method: "DELETE",
+    }),
+
+  createMilestone: (
+    projectId: string,
+    payload: { title: string; description?: string | null; dueDate?: string | null; status?: MilestoneStatus }
+  ) =>
+    request<ItemResponse<Milestone>>(`/api/v1/projects/${projectId}/milestones`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateMilestone: (milestoneId: string, payload: Record<string, unknown>) =>
+    request<ItemResponse<Milestone>>(`/api/v1/projects/milestones/${milestoneId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  getTaskComments: (taskId: string) =>
+    request<ItemResponse<TaskComment[]>>(`/api/v1/projects/tasks/${taskId}/comments`),
+
+  addComment: (taskId: string, content: string) =>
+    request<ItemResponse<TaskComment>>(`/api/v1/projects/tasks/${taskId}/comments`, {
+      method: "POST",
+      body: JSON.stringify({ content }),
     }),
 
   updateProjectMember: (
@@ -759,11 +960,6 @@ export const api = {
       `/api/v1/projects/${projectId}/members/${userId}`,
       { method: "PATCH", body: JSON.stringify(payload) }
     ),
-
-  removeProjectMember: (projectId: string, userId: string) =>
-    request<void>(`/api/v1/projects/${projectId}/members/${userId}`, {
-      method: "DELETE",
-    }),
 
   // ---- Time ----
   listMyTimeLogs: (page = 1, pageSize = 10) =>
