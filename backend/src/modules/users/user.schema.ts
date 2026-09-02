@@ -116,6 +116,16 @@ export const createFullUserSchema = z.object({
   draftId: z.string().optional(),
 });
 
+// Full 6-Step Update Schema — same shape as creation
+export const updateFullUserSchema = z.object({
+  step1: step1BasicInfoSchema,
+  step2: step2PersonalProfileSchema,
+  step3: step3PreviousEmploymentSchema,
+  step4: step4CurrentEmploymentSchema,
+  step5: step5TeamAccessSchema,
+  step6: step6ImportantDatesSchema,
+});
+
 // Legacy User Management Schemas
 export const createUserSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -159,5 +169,8 @@ export const updateProfileSchema = z.object({
 
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
+export type PreviousEmploymentItem = z.infer<typeof previousEmploymentItemSchema>;
+export type Step3PreviousEmployment = z.infer<typeof step3PreviousEmploymentSchema>;
 export type CreateFullUserInput = z.infer<typeof createFullUserSchema>;
+export type UpdateFullUserInput = z.infer<typeof updateFullUserSchema>;
 export type CreateDraftInput = z.infer<typeof createDraftSchema>;

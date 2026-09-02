@@ -1,5 +1,6 @@
 export * from "./types";
 export * from "./motion";
+export { UserWizard } from "./UserWizard";
 export { WizardStepper } from "./wizard-stepper";
 export { WizardHeader } from "./wizard-header";
 export { WizardFooter } from "./wizard-footer";

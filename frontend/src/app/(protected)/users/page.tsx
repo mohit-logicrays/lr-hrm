@@ -61,8 +61,7 @@ export default function UsersPage() {
 
   // Row selection for bulk actions
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
-  const [editUser, setEditUser] = useState<User | null>(null);
-  const [resetPasswordModal, setResetPasswordModal] = useState<{ user: User; newPassword?: string } | null>(null);
+  const [resetPasswordModal, setResetPasswordModal] = useState<{ user: User } | null>(null);
 
   // Load dropdowns & user list
   const loadLookups = useCallback(async () => {
@@ -145,6 +144,11 @@ export default function UsersPage() {
     }
   }
 
+  // Edit User -> full 6-step stepper wizard on its own page
+  function handleEdit(u: User) {
+    router.push(`/users/edit/${u.id}`);
+  }
+
   // Status Change Handler
   async function handleStatusChange(u: User, newStatus: UserStatus) {
     try {
@@ -159,9 +163,9 @@ export default function UsersPage() {
   // Reset Password Handler
   async function handleResetPassword(u: User) {
     try {
-      const res = await api.resetUserPassword(u.id);
-      setResetPasswordModal({ user: u, newPassword: res.data.temporaryPassword });
-      toast.success(`Password reset generated for ${displayName(u)}`);
+      await api.resetUserPassword(u.id);
+      setResetPasswordModal({ user: u });
+      toast.success(`Password reset sent to ${displayName(u)}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to reset password");
     }
@@ -301,7 +305,7 @@ export default function UsersPage() {
                       isSelected={selectedUserIds.includes(u.id)}
                       canDelete={perms.delete}
                       onToggleSelect={toggleSelectUser}
-                      onEdit={setEditUser}
+                      onEdit={handleEdit}
                       onResetPassword={handleResetPassword}
                       onStatusChange={handleStatusChange}
                       onDelete={handleDelete}
@@ -349,41 +353,21 @@ export default function UsersPage() {
         )}
       </Card>
 
-      {/* Edit User Modal */}
-      {editUser && (
-        <UserEditModal
-          user={editUser}
-          roles={roles}
-          departments={departments}
-          onClose={() => setEditUser(null)}
-          onSaved={() => {
-            setEditUser(null);
-            loadUsers();
-          }}
-        />
-      )}
-
       {/* Password Reset Modal */}
       {resetPasswordModal && (
         <Dialog open onOpenChange={() => setResetPasswordModal(null)}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle className="text-base font-bold font-heading">
-                Password Reset Successfully
+                Password Reset Sent
               </DialogTitle>
               <DialogDescription className="text-xs">
-                A new temporary password has been assigned for{" "}
-                <strong>{displayName(resetPasswordModal.user)}</strong>.
+                A new temporary password has been emailed directly to{" "}
+                <strong>{displayName(resetPasswordModal.user)}</strong> at{" "}
+                <strong>{resetPasswordModal.user.email}</strong>. The user must change it
+                on their next login.
               </DialogDescription>
             </DialogHeader>
-            <div className="p-3 rounded-lg border border-brand/20 bg-brand/5 space-y-1 my-2">
-              <span className="text-[10px] text-text-tertiary uppercase font-mono tracking-wider block">
-                Temporary Password
-              </span>
-              <code className="text-sm font-bold font-mono text-brand block select-all">
-                {resetPasswordModal.newPassword}
-              </code>
-            </div>
             <DialogFooter>
               <Button size="sm" onClick={() => setResetPasswordModal(null)} className="text-xs h-8">
                 Done

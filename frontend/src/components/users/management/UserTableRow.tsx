@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { User, UserStatus } from "@/lib/api";
+import { User, UserStatus, apiFileUrl } from "@/lib/api";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -94,7 +94,7 @@ export function UserTableRow({
         <div className="flex items-center gap-3">
           {user.avatarUrl ? (
             <img
-              src={user.avatarUrl}
+              src={apiFileUrl(user.avatarUrl)}
               alt={nameStr}
               className="w-9 h-9 rounded-full object-cover border border-border-base shrink-0"
             />

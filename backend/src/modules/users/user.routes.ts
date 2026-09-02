@@ -46,6 +46,11 @@ router.post(
   requirePermission(PERMISSIONS.USER_CREATE),
   userController.createFullUser
 );
+router.put(
+  "/full/:id",
+  requirePermission(PERMISSIONS.USER_UPDATE),
+  userController.updateFullUser
+);
 
 // ---- Admin User Management ----
 router.get(

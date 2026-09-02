@@ -11,6 +11,7 @@ import {
   updateProfileSchema,
   createDraftSchema,
   createFullUserSchema,
+  updateFullUserSchema,
   resetPasswordSchema,
 } from "./user.schema";
 import { AppError } from "../../utils/AppError";
@@ -40,6 +41,12 @@ export const createFullUser = asyncHandler(async (req: Request, res: Response) =
   const body = createFullUserSchema.parse(req.body);
   const user = await userService.createFullUser(body, req.user?.id);
   ApiResponse.success(res, 201, "User created successfully. Credentials have been sent.", user);
+});
+
+export const updateFullUser = asyncHandler(async (req: Request, res: Response) => {
+  const body = updateFullUserSchema.parse(req.body);
+  const user = await userService.updateFullUser(req.params.id, body);
+  ApiResponse.success(res, 200, "User updated successfully", user);
 });
 
 /**

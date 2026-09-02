@@ -91,6 +91,65 @@ export interface User {
   mustChangePassword?: boolean;
   createdAt?: string;
   updatedAt?: string;
+  // --- Rich detail (fetched via getUser) ---
+  profile?: {
+    dateOfBirth?: string | null;
+    bloodGroup?: string | null;
+    maritalStatus?: string | null;
+    nationality?: string | null;
+    aadhaarNumber?: string | null;
+    panNumber?: string | null;
+    currentAddress?: Record<string, unknown> | null;
+    permanentAddress?: Record<string, unknown> | null;
+    sameAsCurrentAddress?: boolean;
+    emergencyContactName?: string | null;
+    emergencyContactRelation?: string | null;
+    emergencyContactPhone?: string | null;
+    linkedinUrl?: string | null;
+    portfolioUrl?: string | null;
+  } | null;
+  currentEmployment?: {
+    designation?: string | null;
+    employmentType?: string | null;
+    workMode?: string | null;
+    workLocation?: string | null;
+    ctc?: number | null;
+    probationPeriodMonths?: number | null;
+    noticePeriodDays?: number | null;
+    shiftTiming?: string | null;
+    skills?: string[];
+    about?: string | null;
+    reportingManagerId?: string | null;
+    projectManagerId?: string | null;
+  } | null;
+  importantDates?: {
+    interviewDate?: string | null;
+    offerDate?: string | null;
+    joiningDate?: string | null;
+    probationEndDate?: string | null;
+    confirmationDate?: string | null;
+    resignDate?: string | null;
+    lastWorkingDay?: string | null;
+    fullAndFinalDate?: string | null;
+  } | null;
+  previousEmployments?: Array<{
+    companyName: string;
+    designation?: string | null;
+    employmentType?: string | null;
+    startDate?: string | null;
+    endDate?: string | null;
+    lastDrawnSalary?: number | null;
+    reasonForLeaving?: string | null;
+    hrContactName?: string | null;
+    hrContactPhone?: string | null;
+    hrContactEmail?: string | null;
+    experienceLetterUrl?: string | null;
+    relievingLetterUrl?: string | null;
+  }> | null;
+  teamMembers?: Array<{
+    teamId: string;
+    isTeamLead?: boolean;
+  }> | null;
 }
 
 export interface CreateUserPayload {
@@ -442,6 +501,12 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
+  updateFullUser: (id: string, payload: Omit<CreateFullUserPayload, "draftId">) =>
+    request<ItemResponse<User>>(`/api/v1/users/full/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
   saveUserDraft: (payload: { draftId?: string; officialEmail?: string; currentStep: number; stepData: object }) =>
     request<ItemResponse<UserDraft>>("/api/v1/users/draft", {
       method: "POST",
@@ -482,7 +547,7 @@ export const api = {
     }),
 
   resetUserPassword: (id: string, newPassword?: string) =>
-    request<ItemResponse<{ temporaryPassword: string }>>(`/api/v1/users/${id}/reset-password`, {
+    request<ItemResponse<{ sent: boolean }>>(`/api/v1/users/${id}/reset-password`, {
       method: "POST",
       body: JSON.stringify({ newPassword }),
     }),

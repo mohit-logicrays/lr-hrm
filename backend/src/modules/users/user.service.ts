@@ -4,7 +4,7 @@ import { AppError } from "../../utils/AppError";
 import { hashPassword, comparePassword } from "../../utils/password";
 import { emailService } from "../../services/email.service";
 import { userDraftService } from "./user.draft.service";
-import type { CreateUserInput, UpdateUserInput, CreateFullUserInput } from "./user.schema";
+import type { CreateUserInput, UpdateUserInput, CreateFullUserInput, UpdateFullUserInput, PreviousEmploymentItem } from "./user.schema";
 
 const userSelect = {
   id: true,
@@ -303,6 +303,197 @@ export class UserService {
     return this.getById(user.id);
   }
 
+  /**
+   * Full 6-step update. Mirrors createFullUser but updates an existing user in
+   * place (identity/core fields, profile, current employment, important dates,
+   * previous employments, and team memberships).
+   */
+  async updateFullUser(id: string, data: UpdateFullUserInput) {
+    const existing = await prisma.user.findFirst({ where: { id, deletedAt: null } });
+    if (!existing) throw new AppError(404, "User not found");
+
+    const { step1, step2, step3, step4, step5, step6 } = data;
+
+    const email = step1.officialEmail.toLowerCase();
+    const emailConflict = await prisma.user.findFirst({
+      where: { email, deletedAt: null, id: { not: id } },
+    });
+    if (emailConflict) {
+      throw new AppError(409, `User with official email "${email}" already exists`);
+    }
+
+    const role = await prisma.role.findUnique({ where: { id: step1.roleId } });
+    if (!role) throw new AppError(404, "Selected role not found");
+
+    const department = await prisma.department.findUnique({ where: { id: step1.departmentId } });
+    if (!department) throw new AppError(404, "Selected department not found");
+
+    const joiningDateObj = new Date(step6.joiningDate);
+    const probationMonths = step4.probationPeriodMonths || 3;
+    const autoProbationEndDate = new Date(joiningDateObj);
+    autoProbationEndDate.setMonth(autoProbationEndDate.getMonth() + probationMonths);
+    const probationEndDateObj = step6.probationEndDate ? new Date(step6.probationEndDate) : autoProbationEndDate;
+
+    const user = await prisma.$transaction(async (tx) => {
+      // 1. Update Core User (identity + assignment), keep email/employeeId/password
+      const updatedUser = await tx.user.update({
+        where: { id },
+        data: {
+          personalEmail: step1.personalEmail || null,
+          mobile: step1.mobile,
+          alternateMobile: step1.alternateMobile || null,
+          gender: step1.gender || null,
+          avatarUrl: step1.avatarUrl || null,
+          firstName: step1.firstName,
+          lastName: step1.lastName,
+          phone: step1.mobile,
+          designation: step4.designation,
+          roleId: role.id,
+          departmentId: department.id,
+          isSpecialRole: step5.isSpecialRole || role.isSpecial,
+          specialRoleName: step5.isSpecialRole ? step5.specialRoleName || role.displayName : null,
+        },
+      });
+
+      // 2. Upsert Profile Details
+      await tx.userProfile.upsert({
+        where: { userId: id },
+        create: {
+          userId: id,
+          dateOfBirth: step2.dateOfBirth ? new Date(step2.dateOfBirth) : null,
+          bloodGroup: step2.bloodGroup || null,
+          maritalStatus: step2.maritalStatus || null,
+          nationality: step2.nationality || null,
+          aadhaarNumber: step2.aadhaarNumber || null,
+          panNumber: step2.panNumber || null,
+          currentAddress: step2.currentAddress || Prisma.JsonNull,
+          permanentAddress: step2.sameAsCurrentAddress ? step2.currentAddress || Prisma.JsonNull : step2.permanentAddress || Prisma.JsonNull,
+          sameAsCurrentAddress: step2.sameAsCurrentAddress,
+          emergencyContactName: step2.emergencyContactName || null,
+          emergencyContactRelation: step2.emergencyContactRelation || null,
+          emergencyContactPhone: step2.emergencyContactPhone || null,
+          linkedinUrl: step2.linkedinUrl || null,
+          portfolioUrl: step2.portfolioUrl || null,
+        },
+        update: {
+          dateOfBirth: step2.dateOfBirth ? new Date(step2.dateOfBirth) : null,
+          bloodGroup: step2.bloodGroup || null,
+          maritalStatus: step2.maritalStatus || null,
+          nationality: step2.nationality || null,
+          aadhaarNumber: step2.aadhaarNumber || null,
+          panNumber: step2.panNumber || null,
+          currentAddress: step2.currentAddress || Prisma.JsonNull,
+          permanentAddress: step2.sameAsCurrentAddress ? step2.currentAddress || Prisma.JsonNull : step2.permanentAddress || Prisma.JsonNull,
+          sameAsCurrentAddress: step2.sameAsCurrentAddress,
+          emergencyContactName: step2.emergencyContactName || null,
+          emergencyContactRelation: step2.emergencyContactRelation || null,
+          emergencyContactPhone: step2.emergencyContactPhone || null,
+          linkedinUrl: step2.linkedinUrl || null,
+          portfolioUrl: step2.portfolioUrl || null,
+        },
+      });
+
+      // 3. Upsert Current Employment Details
+      await tx.userCurrentEmployment.upsert({
+        where: { userId: id },
+        create: {
+          userId: id,
+          designation: step4.designation,
+          employmentType: step4.employmentType,
+          workMode: step4.workMode,
+          workLocation: step4.workLocation || null,
+          ctc: Number(step4.ctc) || 0,
+          probationPeriodMonths: Number(step4.probationPeriodMonths) || 3,
+          noticePeriodDays: Number(step4.noticePeriodDays) || 30,
+          shiftTiming: step4.shiftTiming || null,
+          skills: step4.skills || [],
+          about: step4.about || null,
+          reportingManagerId: step5.reportingManagerId || null,
+          projectManagerId: step5.projectManagerId || null,
+        },
+        update: {
+          designation: step4.designation,
+          employmentType: step4.employmentType,
+          workMode: step4.workMode,
+          workLocation: step4.workLocation || null,
+          ctc: Number(step4.ctc) || 0,
+          probationPeriodMonths: Number(step4.probationPeriodMonths) || 3,
+          noticePeriodDays: Number(step4.noticePeriodDays) || 30,
+          shiftTiming: step4.shiftTiming || null,
+          skills: step4.skills || [],
+          about: step4.about || null,
+          reportingManagerId: step5.reportingManagerId || null,
+          projectManagerId: step5.projectManagerId || null,
+        },
+      });
+
+      // 4. Upsert Important Dates
+      await tx.userImportantDates.upsert({
+        where: { userId: id },
+        create: {
+          userId: id,
+          interviewDate: step6.interviewDate ? new Date(step6.interviewDate) : null,
+          offerDate: step6.offerDate ? new Date(step6.offerDate) : null,
+          joiningDate: joiningDateObj,
+          probationEndDate: probationEndDateObj,
+          confirmationDate: step6.confirmationDate ? new Date(step6.confirmationDate) : null,
+          resignDate: step6.resignDate ? new Date(step6.resignDate) : null,
+          lastWorkingDay: step6.lastWorkingDay ? new Date(step6.lastWorkingDay) : null,
+          fullAndFinalDate: step6.fullAndFinalDate ? new Date(step6.fullAndFinalDate) : null,
+        },
+        update: {
+          interviewDate: step6.interviewDate ? new Date(step6.interviewDate) : null,
+          offerDate: step6.offerDate ? new Date(step6.offerDate) : null,
+          joiningDate: joiningDateObj,
+          probationEndDate: probationEndDateObj,
+          confirmationDate: step6.confirmationDate ? new Date(step6.confirmationDate) : null,
+          resignDate: step6.resignDate ? new Date(step6.resignDate) : null,
+          lastWorkingDay: step6.lastWorkingDay ? new Date(step6.lastWorkingDay) : null,
+          fullAndFinalDate: step6.fullAndFinalDate ? new Date(step6.fullAndFinalDate) : null,
+        },
+      });
+
+      // 5. Replace Previous Employment Entries
+      await tx.userPreviousEmployment.deleteMany({ where: { userId: id } });
+      if (step3.previousEmployments && step3.previousEmployments.length > 0) {
+        await tx.userPreviousEmployment.createMany({
+          data: step3.previousEmployments.map((emp: PreviousEmploymentItem) => ({
+            userId: id,
+            companyName: emp.companyName,
+            designation: emp.designation || null,
+            employmentType: emp.employmentType || null,
+            startDate: emp.startDate ? new Date(emp.startDate) : null,
+            endDate: emp.endDate ? new Date(emp.endDate) : null,
+            lastDrawnSalary: emp.lastDrawnSalary ? Number(emp.lastDrawnSalary) : null,
+            reasonForLeaving: emp.reasonForLeaving || null,
+            hrContactName: emp.hrContactName || null,
+            hrContactPhone: emp.hrContactPhone || null,
+            hrContactEmail: emp.hrContactEmail || null,
+            experienceLetterUrl: emp.experienceLetterUrl || null,
+            relievingLetterUrl: emp.relievingLetterUrl || null,
+          })),
+        });
+      }
+
+      // 6. Replace Team Memberships
+      await tx.teamMember.deleteMany({
+        where: { userId: id, isTeamLead: false },
+      });
+      const allTeamIds = Array.from(new Set([step5.primaryTeamId, ...(step5.additionalTeamIds || [])]));
+      for (const tId of allTeamIds) {
+        if (tId) {
+          await tx.teamMember.create({
+            data: { userId: id, teamId: tId, isTeamLead: false },
+          });
+        }
+      }
+
+      return updatedUser;
+    });
+
+    return this.getById(user.id);
+  }
+
   async create(data: CreateUserInput, createdBy?: string) {
     const email = data.email.toLowerCase();
     const existing = await prisma.user.findFirst({ where: { email, deletedAt: null } });
@@ -390,7 +581,15 @@ export class UserService {
       data: { password: passwordHash, mustChangePassword: true },
     });
 
-    return { temporaryPassword: newPassword };
+    // Send the temporary password directly to the user via email.
+    const fullName = `${user.firstName} ${user.lastName ?? ""}`.trim();
+    await emailService.sendPasswordReset({
+      toEmail: user.email,
+      employeeName: fullName,
+      temporaryPassword: newPassword,
+    });
+
+    return { sent: true };
   }
 
   async remove(id: string) {

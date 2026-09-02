@@ -9,9 +9,11 @@ interface WizardHeaderProps {
   draftId: string | null;
   saving: boolean;
   onSaveDraft: () => void;
+  mode?: "create" | "edit";
 }
 
-export function WizardHeader({ autoSaving, draftId, saving, onSaveDraft }: WizardHeaderProps) {
+export function WizardHeader({ autoSaving, draftId, saving, onSaveDraft, mode = "create" }: WizardHeaderProps) {
+  const isEdit = mode === "edit";
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-base pb-3">
       <div className="flex items-center gap-3">
@@ -27,36 +29,42 @@ export function WizardHeader({ autoSaving, draftId, saving, onSaveDraft }: Wizar
         >
           <h1 className="flex items-center gap-2 font-heading text-xl font-bold tracking-tight text-text-primary md:text-2xl">
             <UserRound className="h-5 w-5 text-brand" />
-            Create New User
+            {isEdit ? "Edit User" : "Create New User"}
           </h1>
           <p className="text-xs text-text-tertiary">
-            Complete all 6 steps to configure identity, profile, employment, and access.
+            {isEdit
+              ? "Update identity, profile, employment, and access across all 6 steps."
+              : "Complete all 6 steps to configure identity, profile, employment, and access."}
           </p>
         </motion.div>
       </div>
 
       <div className="flex items-center gap-2">
-        <span
-          className={cn(
-            "hidden items-center gap-1 rounded-full border px-2.5 py-1 font-mono text-[10px] sm:flex",
-            draftId
-              ? "border-brand/30 bg-brand/5 text-brand"
-              : "border-border-base text-text-tertiary"
-          )}
-        >
-          <Sparkles className="h-3 w-3" />
-          {draftId ? `Draft #${draftId.slice(0, 8)}` : "No draft yet"}
-        </span>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onSaveDraft}
-          disabled={autoSaving || saving}
-          className="gap-1.5 text-xs"
-        >
-          {autoSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-          {autoSaving ? "Saving…" : "Save Draft"}
-        </Button>
+        {!isEdit && (
+          <>
+            <span
+              className={cn(
+                "hidden items-center gap-1 rounded-full border px-2.5 py-1 font-mono text-[10px] sm:flex",
+                draftId
+                  ? "border-brand/30 bg-brand/5 text-brand"
+                  : "border-border-base text-text-tertiary"
+              )}
+            >
+              <Sparkles className="h-3 w-3" />
+              {draftId ? `Draft #${draftId.slice(0, 8)}` : "No draft yet"}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onSaveDraft}
+              disabled={autoSaving || saving}
+              className="gap-1.5 text-xs"
+            >
+              {autoSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+              {autoSaving ? "Saving…" : "Save Draft"}
+            </Button>
+          </>
+        )}
       </div>
     </div>
   );
