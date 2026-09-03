@@ -10,6 +10,7 @@ import {
   type LeaveBalance,
   type User,
   type LeaveRequestStatus,
+  type ApprovalLogItem,
 } from "@/lib/api";
 import { usePermission, useAuth } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ import { ApplyLeaveSheet } from "@/components/leave/ApplyLeaveSheet";
 import { EditLeaveSheet } from "@/components/leave/EditLeaveSheet";
 import { CalendarDayDialog } from "@/components/leave/CalendarDayDialog";
 import { RichTextViewer } from "@/components/ui/rich-text-editor";
+import { ApprovalTimeline } from "@/components/approval/ApprovalTimeline";
 import {
   Calendar,
   CalendarDays,
@@ -50,6 +52,8 @@ import {
   Pencil,
   Sun,
   Sunset,
+  Eye,
+  MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -62,7 +66,9 @@ export default function LeaveManagementPage() {
 
   // Check if current user has HR Admin / Superadmin role for HR-only actions
   const roleName = typeof user?.role === "string" ? user.role : (user?.role as any)?.name || "";
-  const isHr = ["SUPERADMIN", "HR_ADMIN", "ADMIN"].includes(roleName.toUpperCase());
+  const isHr =
+    ["SUPERADMIN", "HR_ADMIN", "ADMIN", "HR"].includes(roleName.toUpperCase()) ||
+    Boolean(perms.type_manage || perms.balance_manage || user?.isSpecialRole);
 
   const [activeTab, setActiveTab] = useState<LeaveTab>("team_requests");
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
@@ -111,6 +117,24 @@ export default function LeaveManagementPage() {
     maxDaysPerYear: "12",
     isPaid: true,
   });
+
+  // Approval Timeline Drawer / Modal State
+  const [timelineRequest, setTimelineRequest] = useState<LeaveRequest | null>(null);
+  const [timelineLogs, setTimelineLogs] = useState<ApprovalLogItem[]>([]);
+  const [loadingTimelineLogs, setLoadingTimelineLogs] = useState(false);
+
+  async function openTimelineModal(request: LeaveRequest) {
+    setTimelineRequest(request);
+    setLoadingTimelineLogs(true);
+    try {
+      const res = await api.getLeaveLogs(request.id);
+      setTimelineLogs(res.data || []);
+    } catch {
+      setTimelineLogs([]);
+    } finally {
+      setLoadingTimelineLogs(false);
+    }
+  }
 
   const loadData = useCallback(async () => {
     try {
@@ -620,16 +644,27 @@ export default function LeaveManagementPage() {
                             </Badge>
                           </td>
 
-                          {/* Actions (Approve/Reject + HR Edit) */}
+                          {/* Actions (Approve/Reject + HR Edit + Timeline) */}
                           <td className="py-3 px-6 text-right">
                             <div className="flex items-center justify-end gap-1">
+                              {/* View Approval Timeline Trigger */}
+                              <Button
+                                size="xs"
+                                variant="ghost"
+                                onClick={() => openTimelineModal(r)}
+                                className="h-7 w-7 p-0 text-text-tertiary hover:text-brand cursor-pointer"
+                                title="View Approval Timeline"
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                              </Button>
+
                               {/* HR Only Edit Trigger */}
                               {isHr && (
                                 <Button
                                   size="xs"
                                   variant="ghost"
                                   onClick={() => setEditingRequest(r)}
-                                  className="h-7 w-7 p-0 text-text-tertiary hover:text-brand"
+                                  className="h-7 w-7 p-0 text-text-tertiary hover:text-brand cursor-pointer"
                                   title="HR Edit Leave Request"
                                 >
                                   <Pencil className="h-3.5 w-3.5" />
@@ -1117,6 +1152,134 @@ export default function LeaveManagementPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Leave Approval Timeline Modal */}
+      <Dialog open={Boolean(timelineRequest)} onOpenChange={(open) => !open && setTimelineRequest(null)}>
+        <DialogContent className="sm:max-w-lg bg-surface p-6">
+          <DialogHeader className="pb-4 border-b border-border-base">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-brand/10 text-brand flex items-center justify-center font-bold">
+                <Clock className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle className="font-heading text-base font-bold text-text-primary">
+                  Leave Approval Timeline
+                </DialogTitle>
+                <DialogDescription className="text-xs text-text-tertiary">
+                  Multi-level review audit trail & stage approval history
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {timelineRequest && (
+            <div className="space-y-4 pt-2 max-h-[70vh] overflow-y-auto pr-1">
+              {/* Summary Card */}
+              <div className="p-3.5 rounded-xl border border-border-base bg-surface-subtle/50 space-y-2">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="font-bold text-xs text-text-primary">
+                      {timelineRequest.user?.firstName} {timelineRequest.user?.lastName}
+                    </p>
+                    <p className="text-[11px] text-text-tertiary font-mono">{timelineRequest.user?.email}</p>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-[10px] font-bold px-2 py-0.5 uppercase",
+                      timelineRequest.status === "PENDING" && "bg-warning/10 text-warning border-warning/30",
+                      timelineRequest.status === "APPROVED" && "bg-success/10 text-success border-success/30",
+                      timelineRequest.status === "REJECTED" && "bg-error/10 text-error border-error/30",
+                      timelineRequest.status === "CANCELLED" && "bg-surface text-text-tertiary"
+                    )}
+                  >
+                    {timelineRequest.status}
+                  </Badge>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-border-base/50">
+                  <div>
+                    <span className="text-[10px] text-text-tertiary uppercase font-bold block">Type</span>
+                    <span className="font-semibold text-text-primary">
+                      {timelineRequest.leaveType?.name || "Leave"} ({timelineRequest.days} {timelineRequest.days === 1 ? "day" : "days"})
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-text-tertiary uppercase font-bold block">Dates</span>
+                    <span className="font-semibold text-text-primary font-mono text-[11px]">
+                      {new Date(timelineRequest.startDate).toLocaleDateString()} - {new Date(timelineRequest.endDate).toLocaleDateString()}
+                    </span>
+                  </div>
+                </div>
+
+                {timelineRequest.reason && (
+                  <div className="pt-2 border-t border-border-base/50">
+                    <span className="text-[10px] text-text-tertiary uppercase font-bold block">Reason / Notes</span>
+                    <div className="text-xs text-text-secondary mt-0.5">
+                      <RichTextViewer content={timelineRequest.reason} />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 3-Level Progress Indicator */}
+              <div className="p-3 rounded-xl border border-border-base bg-surface">
+                <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider block mb-2">
+                  Approval Gates
+                </span>
+                <div className="grid grid-cols-3 gap-2 text-center text-xs font-mono">
+                  <div className={cn(
+                    "p-2 rounded-lg border",
+                    timelineRequest.tlApprovalStatus === "APPROVED" ? "bg-success/10 text-success border-success/30" :
+                    timelineRequest.tlApprovalStatus === "REJECTED" ? "bg-error/10 text-error border-error/30" :
+                    "bg-surface-subtle text-text-tertiary border-border-base"
+                  )}>
+                    <span className="font-bold block text-[10px]">Team Lead</span>
+                    <span className="text-[9px]">{timelineRequest.tlApprovalStatus || "PENDING"}</span>
+                  </div>
+                  <div className={cn(
+                    "p-2 rounded-lg border",
+                    timelineRequest.pmApprovalStatus === "APPROVED" ? "bg-success/10 text-success border-success/30" :
+                    timelineRequest.pmApprovalStatus === "REJECTED" ? "bg-error/10 text-error border-error/30" :
+                    "bg-surface-subtle text-text-tertiary border-border-base"
+                  )}>
+                    <span className="font-bold block text-[10px]">Project Manager</span>
+                    <span className="text-[9px]">{timelineRequest.pmApprovalStatus || "PENDING"}</span>
+                  </div>
+                  <div className={cn(
+                    "p-2 rounded-lg border",
+                    timelineRequest.hrApprovalStatus === "APPROVED" ? "bg-success/10 text-success border-success/30" :
+                    timelineRequest.hrApprovalStatus === "REJECTED" ? "bg-error/10 text-error border-error/30" :
+                    "bg-surface-subtle text-text-tertiary border-border-base"
+                  )}>
+                    <span className="font-bold block text-[10px]">HR Admin</span>
+                    <span className="text-[9px]">{timelineRequest.hrApprovalStatus || "PENDING"}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Approval Timeline Logs */}
+              <div className="space-y-2 pt-2">
+                <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider block">
+                  Audit Activity Log
+                </span>
+                <ApprovalTimeline logs={timelineLogs} loading={loadingTimelineLogs} />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="pt-4 border-t border-border-base">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setTimelineRequest(null)}
+            >
+              Close
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

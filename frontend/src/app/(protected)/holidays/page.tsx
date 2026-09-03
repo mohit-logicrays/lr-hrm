@@ -8,7 +8,7 @@ import {
   type Holiday,
   type HolidayType,
 } from "@/lib/api";
-import { useAuth } from "@/providers/auth-provider";
+import { useAuth, usePermission } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -55,8 +55,11 @@ const itemVariants = {
 
 export default function HolidayManagementPage() {
   const { user } = useAuth();
+  const holidayPerms = usePermission("holiday");
   const roleName = typeof user?.role === "string" ? user.role : (user?.role as any)?.name || "";
-  const isHr = ["SUPERADMIN", "HR_ADMIN", "ADMIN"].includes(roleName.toUpperCase());
+  const isHr =
+    ["SUPERADMIN", "HR_ADMIN", "ADMIN", "HR"].includes(roleName.toUpperCase()) ||
+    Boolean(holidayPerms.manage || holidayPerms.create || user?.isSpecialRole);
 
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
@@ -154,34 +157,42 @@ export default function HolidayManagementPage() {
         </div>
 
         {/* Action Controls */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2.5">
           {/* Year Selector */}
-          <select
-            className="h-9 rounded-md border border-border-base bg-surface px-3 text-xs font-bold text-text-primary focus:border-brand focus:outline-none cursor-pointer"
-            value={year}
-            onChange={(e) => setYear(Number(e.target.value))}
-          >
-            <option value={2026}>2026</option>
-            <option value={2025}>2025</option>
-            <option value={2024}>2024</option>
-          </select>
+          <div className="relative">
+            <select
+              className="h-9 rounded-lg border border-border-base bg-surface px-3 py-1.5 text-xs font-semibold text-text-primary hover:border-brand/40 focus:border-brand focus:outline-none transition-colors cursor-pointer shadow-2xs"
+              value={year}
+              onChange={(e) => setYear(Number(e.target.value))}
+            >
+              <option value={2026}>Year 2026</option>
+              <option value={2025}>Year 2025</option>
+              <option value={2024}>Year 2024</option>
+            </select>
+          </div>
 
           {/* View Mode Toggle */}
-          <div className="flex items-center rounded-md border border-border-base bg-surface p-0.5">
+          <div className="flex items-center rounded-lg border border-border-base bg-surface-subtle p-1 h-9 shadow-2xs">
             <button
+              type="button"
               onClick={() => setViewMode("calendar")}
               className={cn(
-                "rounded-md px-2.5 py-1 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all",
-                viewMode === "calendar" ? "bg-brand text-white shadow-2xs" : "text-text-tertiary hover:text-text-primary"
+                "rounded-md px-2.5 py-1 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all",
+                viewMode === "calendar"
+                  ? "bg-surface text-brand shadow-xs font-bold"
+                  : "text-text-tertiary hover:text-text-primary"
               )}
             >
               <LayoutGrid className="h-3.5 w-3.5" /> Calendar
             </button>
             <button
+              type="button"
               onClick={() => setViewMode("list")}
               className={cn(
-                "rounded-md px-2.5 py-1 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all",
-                viewMode === "list" ? "bg-brand text-white shadow-2xs" : "text-text-tertiary hover:text-text-primary"
+                "rounded-md px-2.5 py-1 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all",
+                viewMode === "list"
+                  ? "bg-surface text-brand shadow-xs font-bold"
+                  : "text-text-tertiary hover:text-text-primary"
               )}
             >
               <List className="h-3.5 w-3.5" /> List
@@ -195,20 +206,21 @@ export default function HolidayManagementPage() {
                 variant="outline"
                 size="sm"
                 onClick={downloadTemplate}
-                className="h-9 text-xs gap-1.5 cursor-pointer"
+                className="h-9 text-xs gap-1.5 font-medium border-border-base bg-surface text-text-secondary hover:text-text-primary hover:bg-surface-subtle cursor-pointer shadow-2xs"
                 title="Download CSV Template"
               >
-                <Download className="h-3.5 w-3.5" /> Template
+                <Download className="h-4 w-4 text-text-tertiary" /> Template
               </Button>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setIsImportOpen(true)}
-                className="h-9 text-xs gap-1.5 border-brand/30 text-brand hover:bg-brand/5 cursor-pointer"
+                className="h-9 text-xs gap-1.5 font-medium border-border-base bg-surface text-text-secondary hover:text-text-primary hover:bg-surface-subtle cursor-pointer shadow-2xs"
               >
-                <FileSpreadsheet className="h-3.5 w-3.5" /> Import CSV
+                <FileSpreadsheet className="h-4 w-4 text-text-tertiary" /> Import CSV
               </Button>
               <Button
+                size="sm"
                 onClick={() => {
                   setEditingHoliday(null);
                   setIsAddEditOpen(true);

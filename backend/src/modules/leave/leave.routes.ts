@@ -56,6 +56,11 @@ router.post(
   requirePermission(PERMISSIONS.LEAVE_REQUEST_APPROVE),
   leaveController.approveLeaveRequest
 );
+router.get(
+  "/requests/:id/logs",
+  requirePermission(PERMISSIONS.LEAVE_REQUEST_READ_ALL, PERMISSIONS.LEAVE_REQUEST_READ_OWN),
+  leaveController.getLeaveApprovalLogs
+);
 router.post(
   "/requests/:id/cancel",
   requirePermission(PERMISSIONS.LEAVE_REQUEST_CREATE),

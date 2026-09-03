@@ -71,8 +71,19 @@ export const updateLeaveRequest = asyncHandler(async (req: Request, res: Respons
 export const approveLeaveRequest = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) throw new AppError(401, "Not authenticated");
   const body = approveLeaveSchema.parse(req.body);
-  const request = await leaveService.approveStage(req.params.id, req.user.id, body.status, body.approvalRole || "HR");
+  const request = await leaveService.approveStage(
+    req.params.id,
+    req.user.id,
+    body.status,
+    body.approvalRole || "HR",
+    body.reason
+  );
   ApiResponse.success(res, 200, `Leave request ${body.status.toLowerCase()}`, request);
+});
+
+export const getLeaveApprovalLogs = asyncHandler(async (req: Request, res: Response) => {
+  const logs = await leaveService.getLogs(req.params.id);
+  ApiResponse.success(res, 200, "Leave approval logs fetched", logs);
 });
 
 export const cancelLeaveRequest = asyncHandler(async (req: Request, res: Response) => {

@@ -1,6 +1,7 @@
 import { Prisma, HolidayType } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { AppError } from "../../utils/AppError";
+import { getWorkDaysPerWeek } from "../../utils/workingDays";
 import type { CreateHolidayInput, UpdateHolidayInput, ImportHolidayRowInput } from "./holiday.schema";
 
 const holidaySelect = {
@@ -17,6 +18,13 @@ const holidaySelect = {
 } satisfies Prisma.HolidaySelect;
 
 export class HolidayService {
+  getWorkingDaysConfig() {
+    return {
+      workingDaysPerWeek: getWorkDaysPerWeek(),
+      lastSaturdayWorking: true,
+    };
+  }
+
   async list(params: { page?: number; limit?: number; year?: number; search?: string; type?: HolidayType }) {
     const page = params.page ?? 1;
     const limit = params.limit ?? 50;

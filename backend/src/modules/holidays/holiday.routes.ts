@@ -10,6 +10,7 @@ router.use(authenticate);
 
 router.get("/template", requirePermission(PERMISSIONS.HOLIDAY_READ), holidayController.downloadTemplate);
 router.get("/upcoming", requirePermission(PERMISSIONS.HOLIDAY_READ), holidayController.getUpcomingHolidays);
+router.get("/working-days-config", holidayController.getWorkingDaysConfig);
 router.get("/", requirePermission(PERMISSIONS.HOLIDAY_READ), holidayController.listHolidays);
 
 router.post(

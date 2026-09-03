@@ -1,6 +1,8 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { AppError } from "../../utils/AppError";
+import { calculateNetWorkingDays } from "../../utils/workingDays";
+import { approvalEngine } from "../wfh/approval.engine";
 import type {
   CreateLeaveTypeInput,
   UpdateLeaveTypeInput,
@@ -10,18 +12,6 @@ import type {
 
 function normalizeDate(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-}
-
-function workingDaysBetween(start: Date, end: Date): number {
-  let count = 0;
-  const cur = normalizeDate(start);
-  const last = normalizeDate(end);
-  while (cur <= last) {
-    const day = cur.getDay();
-    if (day !== 0 && day !== 6) count++;
-    cur.setDate(cur.getDate() + 1);
-  }
-  return count;
 }
 
 const leaveTypeSelect = {
@@ -221,16 +211,16 @@ export class LeaveService {
       throw new AppError(403, "You cannot apply for leaves in the past. Only HR can apply for past leaves.");
     }
 
-    const days = data.isHalfDay ? 0.5 : workingDaysBetween(startDate, endDate);
+    const days = data.isHalfDay ? 0.5 : await calculateNetWorkingDays(startDate, endDate);
     if (days <= 0) {
-      throw new AppError(400, "No working days in the selected range");
+      throw new AppError(400, "No working days in the selected range (weekends and company holidays excluded)");
     }
 
     if (type.maxDaysPerYear && days > type.maxDaysPerYear) {
       throw new AppError(400, `Leave type allows a maximum of ${type.maxDaysPerYear} days`);
     }
 
-    // Check for overlap
+    // Check for overlap with existing Leave
     const overlapping = await prisma.leaveRequest.findFirst({
       where: {
         userId: targetUser,
@@ -243,7 +233,21 @@ export class LeaveService {
       select: { id: true },
     });
     if (overlapping) {
-      throw new AppError(409, "Leave request overlaps with an existing pending or approved request");
+      throw new AppError(409, "Leave request overlaps with an existing pending or approved leave request");
+    }
+
+    // Check for collision with existing WFH
+    const overlappingWFH = await prisma.wFHRequest.findFirst({
+      where: {
+        userId: targetUser,
+        status: { in: ["PENDING", "APPROVED"] },
+        startDate: { lte: endDate },
+        endDate: { gte: startDate },
+      },
+      select: { id: true },
+    });
+    if (overlappingWFH) {
+      throw new AppError(409, "Leave request collides with an active/pending Work From Home (WFH) application on these dates");
     }
 
     const year = startDate.getFullYear();
@@ -255,7 +259,7 @@ export class LeaveService {
       create: { userId: targetUser, leaveTypeId: data.leaveTypeId, year, allocated: 0, used: 0 },
     });
 
-    return prisma.leaveRequest.create({
+    const created = await prisma.leaveRequest.create({
       data: {
         userId: targetUser,
         leaveTypeId: data.leaveTypeId,
@@ -269,13 +273,25 @@ export class LeaveService {
       },
       select: leaveRequestSelect,
     });
+
+    // Record initial submission log in approval timeline
+    await approvalEngine.recordLog(
+      "LEAVE",
+      created.id,
+      "SUBMITTED",
+      userId,
+      data.reason ? `Leave application submitted: ${data.reason}` : "Leave application submitted"
+    );
+
+    return created;
   }
 
   async approveStage(
     id: string,
     approvedBy: string,
     status: "APPROVED" | "REJECTED",
-    approvalRole: "TL" | "PM" | "HR" = "HR"
+    approvalRole: "TL" | "PM" | "HR" = "HR",
+    comment?: string | null
   ) {
     const existing = await prisma.leaveRequest.findUnique({ where: { id } });
     if (!existing) throw new AppError(404, "Leave request not found");
@@ -309,6 +325,15 @@ export class LeaveService {
       updateData.approvedBy = approvedBy;
       updateData.approvedAt = now;
       await prisma.leaveRequest.update({ where: { id }, data: updateData });
+
+      // Record rejection log
+      await approvalEngine.recordLog(
+        "LEAVE",
+        id,
+        "REJECTED",
+        approvedBy,
+        comment || `${approvalRole} rejected the leave request`
+      );
     } else {
       // HR approval or final stage approval completes the request
       const isFinalApproval =
@@ -346,6 +371,15 @@ export class LeaveService {
       } else {
         await prisma.leaveRequest.update({ where: { id }, data: updateData });
       }
+
+      // Record approval stage log
+      await approvalEngine.recordLog(
+        "LEAVE",
+        id,
+        "APPROVED",
+        approvedBy,
+        comment || `${approvalRole} approval recorded${isFinalApproval ? " (Final Approval)" : ""}`
+      );
     }
 
     return prisma.leaveRequest.findUnique({ where: { id }, select: leaveRequestSelect });
@@ -361,7 +395,7 @@ export class LeaveService {
     const startDate = data.startDate ? new Date(data.startDate) : existing.startDate;
     const endDate = data.endDate ? new Date(data.endDate) : existing.endDate;
     const isHalfDay = data.isHalfDay !== undefined ? data.isHalfDay : existing.isHalfDay;
-    const days = isHalfDay ? 0.5 : workingDaysBetween(startDate, endDate);
+    const days = isHalfDay ? 0.5 : await calculateNetWorkingDays(startDate, endDate);
 
     return prisma.leaveRequest.update({
       where: { id },
@@ -388,11 +422,19 @@ export class LeaveService {
       throw new AppError(400, "Only pending requests can be cancelled");
     }
 
-    return prisma.leaveRequest.update({
+    const updated = await prisma.leaveRequest.update({
       where: { id },
       data: { status: "CANCELLED", cancelledBy: userId },
       select: leaveRequestSelect,
     });
+
+    await approvalEngine.recordLog("LEAVE", id, "CANCELLED", userId, "Leave request cancelled by employee");
+
+    return updated;
+  }
+
+  async getLogs(id: string) {
+    return approvalEngine.getLogs("LEAVE", id);
   }
 }
 

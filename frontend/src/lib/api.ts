@@ -1369,6 +1369,9 @@ export const api = {
       method: "POST",
     }),
 
+  getLeaveLogs: (id: string) =>
+    request<ItemResponse<ApprovalLogItem[]>>(`/api/v1/leave/requests/${id}/logs`),
+
   getLeaveBalance: (year?: number) =>
     request<ItemResponse<LeaveBalanceResponse>>(
       `/api/v1/leave/balance${qs({ year })}`
@@ -1400,6 +1403,11 @@ export const api = {
   listHolidays: (page = 1, pageSize = 50, year?: number, search = "", type?: HolidayType) =>
     request<ListResponse<Holiday>>(
       `/api/v1/holidays${qs({ page, pageSize, year, search, type })}`
+    ),
+
+  getWorkingDaysConfig: () =>
+    request<ItemResponse<{ workingDaysPerWeek: number; lastSaturdayWorking: boolean }>>(
+      "/api/v1/holidays/working-days-config"
     ),
 
   getUpcomingHolidays: () =>

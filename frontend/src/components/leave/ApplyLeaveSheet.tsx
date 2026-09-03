@@ -2,7 +2,7 @@
 
 import { useState, FormEvent, useEffect } from "react";
 import { toast } from "sonner";
-import { api, type LeaveType } from "@/lib/api";
+import { api, type LeaveType, type Holiday } from "@/lib/api";
 import {
   Sheet,
   SheetContent,
@@ -39,12 +39,87 @@ export function ApplyLeaveSheet({
   const [isHalfDay, setIsHalfDay] = useState(false);
   const [halfDaySession, setHalfDaySession] = useState<"FIRST_HALF" | "SECOND_HALF">("FIRST_HALF");
   const [submitting, setSubmitting] = useState(false);
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
+  const [calculatedDays, setCalculatedDays] = useState<number>(0);
+  const [workDaysPerWeek, setWorkDaysPerWeek] = useState(5);
+
+  useEffect(() => {
+    if (isOpen) {
+      api.listHolidays(1, 100).then((res) => {
+        setHolidays(res.data || []);
+      }).catch(() => {});
+
+      api.getWorkingDaysConfig().then((res) => {
+        if (res.data?.workingDaysPerWeek) {
+          setWorkDaysPerWeek(res.data.workingDaysPerWeek);
+        }
+      }).catch(() => {});
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (leaveTypes.length > 0 && !leaveTypeId) {
       setLeaveTypeId(leaveTypes[0].id);
     }
   }, [leaveTypes, leaveTypeId]);
+
+  function isLastSaturday(d: Date): boolean {
+    if (d.getDay() !== 6) return false;
+    const nextWeek = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 7);
+    return nextWeek.getMonth() !== d.getMonth();
+  }
+
+  useEffect(() => {
+    if (isHalfDay) {
+      setCalculatedDays(0.5);
+      return;
+    }
+    if (!startDate || !endDate) {
+      setCalculatedDays(0);
+      return;
+    }
+
+    const s = new Date(startDate);
+    const e = new Date(endDate);
+    if (e < s) {
+      setCalculatedDays(0);
+      return;
+    }
+
+    const holidaySet = new Set(
+      holidays
+        .filter((h) => !h.isOptional)
+        .map((h) => {
+          const hd = new Date(h.date);
+          return `${hd.getFullYear()}-${String(hd.getMonth() + 1).padStart(2, "0")}-${String(hd.getDate()).padStart(2, "0")}`;
+        })
+    );
+
+    let count = 0;
+    const cur = new Date(s.getFullYear(), s.getMonth(), s.getDate());
+    const last = new Date(e.getFullYear(), e.getMonth(), e.getDate());
+
+    while (cur <= last) {
+      const day = cur.getDay();
+      const dateKey = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`;
+
+      if (!holidaySet.has(dateKey)) {
+        if (day === 0) {
+          // Sunday is always off
+        } else if (day === 6) {
+          // Saturday: Last Saturday of month is always working, or if 6-day work week
+          if (isLastSaturday(cur) || workDaysPerWeek >= 6) {
+            count++;
+          }
+        } else if (day <= workDaysPerWeek) {
+          count++;
+        }
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+
+    setCalculatedDays(count);
+  }, [startDate, endDate, isHalfDay, holidays, workDaysPerWeek]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -175,6 +250,15 @@ export function ApplyLeaveSheet({
               />
             </div>
           </div>
+
+          {startDate && endDate && (
+            <div className="flex items-center justify-between bg-surface-subtle p-2.5 rounded-xl border border-border-base text-xs">
+              <span className="text-text-tertiary">Calculated Working Days:</span>
+              <span className="font-bold text-brand font-mono">
+                {calculatedDays} {calculatedDays === 1 ? "Day" : "Days"}
+              </span>
+            </div>
+          )}
 
           {/* Half Day Checkbox & Session Selector */}
           <div className="space-y-2 pt-1 border-t border-border-base/50">

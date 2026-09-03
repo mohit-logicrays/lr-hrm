@@ -15,6 +15,11 @@ export const listHolidays = asyncHandler(async (req: Request, res: Response) => 
   ApiResponse.success(res, 200, "Holidays fetched", result.data, result.pagination);
 });
 
+export const getWorkingDaysConfig = asyncHandler(async (_req: Request, res: Response) => {
+  const config = holidayService.getWorkingDaysConfig();
+  ApiResponse.success(res, 200, "Working days config fetched", config);
+});
+
 export const createHoliday = asyncHandler(async (req: Request, res: Response) => {
   const body = createHolidaySchema.parse(req.body);
   const holiday = await holidayService.create(body, req.user?.id);

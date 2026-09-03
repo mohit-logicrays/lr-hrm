@@ -2,6 +2,7 @@ import { prisma } from "../../config/prisma";
 import { AppError } from "../../utils/AppError";
 import { approvalEngine } from "./approval.engine";
 import { notificationService } from "../notifications/notification.service";
+import { calculateNetWorkingDays } from "../../utils/workingDays";
 import type { CreateWFHInput } from "./wfh.schema";
 
 const userSelect = {
@@ -20,6 +21,11 @@ export class WFHService {
     const start = new Date(input.startDate);
     const end = new Date(input.endDate);
     if (end < start) throw new AppError(400, "End date cannot be earlier than start date");
+
+    const calculatedDays = await calculateNetWorkingDays(start, end);
+    if (calculatedDays <= 0) {
+      throw new AppError(400, "No working days in the selected range (weekends and company holidays excluded)");
+    }
 
     const overlappingWFH = await prisma.wFHRequest.findFirst({
       where: {
@@ -45,7 +51,7 @@ export class WFHService {
         userId,
         startDate: start,
         endDate: end,
-        days: input.days,
+        days: calculatedDays,
         reason: input.reason,
         attachmentUrl: input.attachmentUrl || null,
         status: "PENDING",
