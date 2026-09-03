@@ -37,7 +37,7 @@ import {
   Home,
   CheckSquare,
 } from "lucide-react";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -177,6 +177,13 @@ export function AppSidebar() {
               className="flex w-full items-center gap-3 rounded-xl p-2.5 text-left hover:bg-sidebar-accent/80 transition-colors group focus:outline-none focus-visible:ring-2 focus-visible:ring-brand cursor-pointer"
             >
               <Avatar className="h-9 w-9 border border-sidebar-border/60 shrink-0">
+                {user?.avatarUrl && (
+                  <AvatarImage
+                    src={user.avatarUrl}
+                    alt={displayName}
+                    className="object-cover"
+                  />
+                )}
                 <AvatarFallback className="bg-brand text-xs font-bold text-white">
                   {initials}
                 </AvatarFallback>

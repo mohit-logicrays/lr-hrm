@@ -18,7 +18,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import {
@@ -144,6 +144,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   className="rounded-full p-0.5 border border-border-base hover:border-brand transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                 >
                   <Avatar className="h-8 w-8">
+                    {user?.avatarUrl && (
+                      <AvatarImage
+                        src={user.avatarUrl}
+                        alt={displayName}
+                        className="object-cover"
+                      />
+                    )}
                     <AvatarFallback className="bg-brand/10 text-xs font-bold text-brand">
                       {initials}
                     </AvatarFallback>
