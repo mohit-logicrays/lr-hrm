@@ -20,13 +20,17 @@ export function requirePermission(...permissions: PermissionKey[]) {
 }
 
 export function requireRoles(...roles: string[]) {
+  const normalizedRoles = roles.map((r) => r.toLowerCase());
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.user) {
       ApiResponse.error(res, 401, "Not authenticated");
       return;
     }
 
-    if (!roles.includes(req.user.roleName)) {
+    const userRole = (req.user.roleName || "").toLowerCase();
+    const hasRole = normalizedRoles.includes(userRole) || (req.user.isSpecialRole && normalizedRoles.includes("superadmin"));
+
+    if (!hasRole) {
       ApiResponse.error(res, 403, "You do not have the required role to perform this action");
       return;
     }

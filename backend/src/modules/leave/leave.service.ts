@@ -282,6 +282,9 @@ export class LeaveService {
     if (existing.status !== "PENDING") {
       throw new AppError(400, `Leave request is already ${existing.status.toLowerCase()}`);
     }
+    if (existing.userId === approvedBy) {
+      throw new AppError(403, "You cannot approve or reject your own leave request");
+    }
 
     const now = new Date();
     const updateData: Prisma.LeaveRequestUpdateInput = {};

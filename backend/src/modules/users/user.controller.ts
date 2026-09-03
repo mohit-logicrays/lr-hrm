@@ -18,13 +18,13 @@ import { AppError } from "../../utils/AppError";
 
 export const listUsers = asyncHandler(async (req: Request, res: Response) => {
   const query = userQuerySchema.parse(req.query);
-  const result = await userService.list(query);
+  const result = await userService.list(query, req.user?.roleName, req.user?.isSpecialRole);
 
   ApiResponse.success(res, 200, "Users fetched", result.data, result.pagination);
 });
 
 export const getUser = asyncHandler(async (req: Request, res: Response) => {
-  const user = await userService.getById(req.params.id);
+  const user = await userService.getById(req.params.id, req.user?.roleName, req.user?.isSpecialRole);
   ApiResponse.success(res, 200, "User fetched", user);
 });
 

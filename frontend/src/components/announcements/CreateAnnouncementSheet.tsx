@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { api, type AnnouncementCategory, type AnnouncementStatus } from "@/lib/api";
+import { api, type Announcement, type AnnouncementCategory, type AnnouncementStatus } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -16,12 +16,14 @@ import { RichTextEditor } from "@/components/ui/rich-text-editor";
 
 interface CreateAnnouncementSheetProps {
   isOpen: boolean;
+  initialData?: Announcement | null;
   onClose: () => void;
   onSuccess: () => void;
 }
 
 export function CreateAnnouncementSheet({
   isOpen,
+  initialData,
   onClose,
   onSuccess,
 }: CreateAnnouncementSheetProps) {
@@ -34,6 +36,30 @@ export function CreateAnnouncementSheet({
   const [status, setStatus] = useState<AnnouncementStatus>("ACTIVE");
   const [expiryDate, setExpiryDate] = useState("");
 
+  useEffect(() => {
+    if (initialData && isOpen) {
+      setTitle(initialData.title || "");
+      setContent(initialData.content || "");
+      setCategory(initialData.category || "GENERAL");
+      setPriority(initialData.priority || "NORMAL");
+      setIsPinned(Boolean(initialData.isPinned));
+      setStatus(initialData.status || "ACTIVE");
+      setExpiryDate(
+        initialData.expiryDate
+          ? new Date(initialData.expiryDate).toISOString().split("T")[0]
+          : ""
+      );
+    } else if (!initialData && isOpen) {
+      setTitle("");
+      setContent("");
+      setCategory("GENERAL");
+      setPriority("NORMAL");
+      setIsPinned(false);
+      setStatus("ACTIVE");
+      setExpiryDate("");
+    }
+  }, [initialData, isOpen]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !content.trim()) {
@@ -43,17 +69,29 @@ export function CreateAnnouncementSheet({
 
     try {
       setLoading(true);
-      await api.createAnnouncement({
-        title,
-        content,
-        category,
-        priority,
-        isPinned,
-        status,
-        expiryDate: expiryDate ? new Date(expiryDate).toISOString() : null,
-      });
-
-      toast.success("Announcement created successfully");
+      if (initialData) {
+        await api.updateAnnouncement(initialData.id, {
+          title,
+          content,
+          category,
+          priority,
+          isPinned,
+          status,
+          expiryDate: expiryDate ? new Date(expiryDate).toISOString() : null,
+        });
+        toast.success("Announcement updated successfully");
+      } else {
+        await api.createAnnouncement({
+          title,
+          content,
+          category,
+          priority,
+          isPinned,
+          status,
+          expiryDate: expiryDate ? new Date(expiryDate).toISOString() : null,
+        });
+        toast.success("Announcement created successfully");
+      }
       setTitle("");
       setContent("");
       setCategory("GENERAL");
@@ -76,10 +114,12 @@ export function CreateAnnouncementSheet({
         <SheetHeader className="pb-4 border-b border-border-base">
           <SheetTitle className="font-heading text-xl font-bold text-text-primary flex items-center gap-2">
             <Megaphone className="h-5 w-5 text-brand" />
-            New Announcement
+            {initialData ? "Edit Announcement" : "New Announcement"}
           </SheetTitle>
           <SheetDescription className="text-xs text-text-tertiary">
-            Publish company-wide announcements, policy updates, or urgent alerts.
+            {initialData
+              ? "Update announcement details, priority, or expiration."
+              : "Publish company-wide announcements, policy updates, or urgent alerts."}
           </SheetDescription>
         </SheetHeader>
 
@@ -192,7 +232,7 @@ export function CreateAnnouncementSheet({
               Cancel
             </Button>
             <Button type="submit" className="bg-brand hover:bg-brand/90 text-white font-bold" disabled={loading}>
-              {loading ? "Publishing..." : "Publish Announcement"}
+              {loading ? "Saving..." : initialData ? "Save Changes" : "Publish Announcement"}
             </Button>
           </div>
         </form>

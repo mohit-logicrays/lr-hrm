@@ -79,7 +79,7 @@ export class SupportService {
     const page = params.page ?? 1;
     const limit = params.limit ?? 20;
     const roleUpper = (user.roleName || "").toUpperCase();
-    const isAdminOrAgent = ["SUPERADMIN", "HR_ADMIN", "ADMIN", "IT_ADMIN", "MANAGER"].includes(roleUpper);
+    const isAdminOrAgent = ["SUPERADMIN", "HR_ADMIN", "ADMIN", "IT_ADMIN", "MANAGER", "HR"].includes(roleUpper);
 
     // If scope is "my" or user is a regular member, lock creatorId to user.id
     const creatorFilter = params.scope === "my" || !isAdminOrAgent ? user.id : params.creatorId;
@@ -132,7 +132,7 @@ export class SupportService {
     if (!ticket) throw new AppError(404, "Support ticket not found");
 
     const roleUpper = (user.roleName || "").toUpperCase();
-    const isAdminOrAgent = ["SUPERADMIN", "HR_ADMIN", "ADMIN", "IT_ADMIN", "MANAGER"].includes(roleUpper);
+    const isAdminOrAgent = ["SUPERADMIN", "HR_ADMIN", "ADMIN", "IT_ADMIN", "MANAGER", "HR"].includes(roleUpper);
 
     if (!isAdminOrAgent && ticket.creatorId !== user.id) {
       throw new AppError(403, "You do not have permission to view this ticket");
@@ -166,7 +166,7 @@ export class SupportService {
     if (!existing) throw new AppError(404, "Support ticket not found");
 
     const roleUpper = (user.roleName || "").toUpperCase();
-    const isAdminOrAgent = ["SUPERADMIN", "HR_ADMIN", "ADMIN", "IT_ADMIN", "MANAGER"].includes(roleUpper);
+    const isAdminOrAgent = ["SUPERADMIN", "HR_ADMIN", "ADMIN", "IT_ADMIN", "MANAGER", "HR"].includes(roleUpper);
 
     if (!isAdminOrAgent && existing.creatorId !== user.id) {
       throw new AppError(403, "You cannot update this support ticket");

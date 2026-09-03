@@ -42,15 +42,19 @@ const userSelect = {
 } satisfies Prisma.UserSelect;
 
 export class UserService {
-  async list(params: {
-    page?: number;
-    limit?: number;
-    search?: string;
-    roleId?: string;
-    departmentId?: string;
-    status?: string;
-    role?: string; // e.g. "lead,manager"
-  }) {
+  async list(
+    params: {
+      page?: number;
+      limit?: number;
+      search?: string;
+      roleId?: string;
+      departmentId?: string;
+      status?: string;
+      role?: string; // e.g. "lead,manager"
+    },
+    requesterRole?: string,
+    requesterIsSpecial = false
+  ) {
     const page = params.page ?? 1;
     const limit = params.limit ?? 10;
 
@@ -66,12 +70,30 @@ export class UserService {
       };
     }
 
+    const normalizedRequesterRole = (requesterRole || "").toLowerCase();
+    const isSuperAdminOrSpecial =
+      normalizedRequesterRole === "superadmin" || requesterIsSpecial;
+
+    // When viewed by HR (or regular roles), hide Superadmin and Special Group Members (Founder, CEO, CTO, etc.)
+    const specialRoleFilter: Prisma.UserWhereInput | undefined = isSuperAdminOrSpecial
+      ? undefined
+      : {
+          isSpecialRole: false,
+          role: {
+            name: {
+              notIn: ["superadmin", "founder", "ceo", "cto", "coo", "cfo"],
+              mode: "insensitive",
+            },
+          },
+        };
+
     const where: Prisma.UserWhereInput = {
       deletedAt: null,
       ...(params.status ? { status: params.status as never } : {}),
       ...(params.roleId ? { roleId: params.roleId } : {}),
       ...(params.departmentId ? { departmentId: params.departmentId } : {}),
       ...roleFilter,
+      ...(specialRoleFilter ? specialRoleFilter : {}),
       ...(params.search
         ? {
             OR: [
@@ -109,12 +131,27 @@ export class UserService {
     };
   }
 
-  async getById(id: string) {
+  async getById(id: string, requesterRole?: string, requesterIsSpecial = false) {
     const user = await prisma.user.findFirst({
       where: { id, deletedAt: null },
       select: userSelect,
     });
     if (!user) throw new AppError(404, "User not found");
+
+    const normalizedRequesterRole = (requesterRole || "").toLowerCase();
+    const isSuperAdminOrSpecial =
+      normalizedRequesterRole === "superadmin" || requesterIsSpecial;
+
+    if (!isSuperAdminOrSpecial) {
+      const userRoleName = (user.role?.name || "").toLowerCase();
+      const isTargetSpecialOrAdmin =
+        user.isSpecialRole ||
+        ["superadmin", "founder", "ceo", "cto", "coo", "cfo"].includes(userRoleName);
+      if (isTargetSpecialOrAdmin && user.id !== id) {
+        throw new AppError(403, "You do not have permission to view this account");
+      }
+    }
+
     return user;
   }
 

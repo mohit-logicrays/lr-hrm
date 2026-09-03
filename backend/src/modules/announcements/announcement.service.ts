@@ -1,10 +1,13 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { AppError } from "../../utils/AppError";
+import { NotificationService } from "../notifications/notification.service";
 import type {
   CreateAnnouncementInput,
   UpdateAnnouncementInput,
 } from "./announcement.schema";
+
+const notificationService = new NotificationService();
 
 const announcementSelect = {
   id: true,
@@ -88,7 +91,7 @@ export class AnnouncementService {
   }
 
   async create(authorId: string, data: CreateAnnouncementInput) {
-    return prisma.announcement.create({
+    const announcement = await prisma.announcement.create({
       data: {
         title: data.title,
         content: data.content,
@@ -102,13 +105,37 @@ export class AnnouncementService {
       },
       select: announcementSelect,
     });
+
+    // Broadcast in background to all active users
+    (async () => {
+      try {
+        const users = await prisma.user.findMany({
+          where: { status: "ACTIVE" },
+          select: { id: true },
+        });
+        const userIds = users.map((u) => u.id);
+        if (userIds.length > 0) {
+          await notificationService.createMany(userIds, {
+            title: `New Announcement: ${announcement.title}`,
+            message: `A new company announcement has been published.`,
+            type: "ANNOUNCEMENT",
+            referenceId: announcement.id,
+            link: "/announcements",
+          });
+        }
+      } catch (err) {
+        console.error("Failed to broadcast announcement notification:", err);
+      }
+    })();
+
+    return announcement;
   }
 
   async update(id: string, data: UpdateAnnouncementInput) {
     const existing = await prisma.announcement.findUnique({ where: { id } });
     if (!existing) throw new AppError(404, "Announcement not found");
 
-    return prisma.announcement.update({
+    const updated = await prisma.announcement.update({
       where: { id },
       data: {
         title: data.title,
@@ -122,6 +149,30 @@ export class AnnouncementService {
       },
       select: announcementSelect,
     });
+
+    // Broadcast update notification in background
+    (async () => {
+      try {
+        const users = await prisma.user.findMany({
+          where: { status: "ACTIVE" },
+          select: { id: true },
+        });
+        const userIds = users.map((u) => u.id);
+        if (userIds.length > 0) {
+          await notificationService.createMany(userIds, {
+            title: `Updated Announcement: ${updated.title}`,
+            message: `The announcement "${updated.title}" has been updated.`,
+            type: "ANNOUNCEMENT",
+            referenceId: updated.id,
+            link: "/announcements",
+          });
+        }
+      } catch (err) {
+        console.error("Failed to broadcast announcement update notification:", err);
+      }
+    })();
+
+    return updated;
   }
 
   async remove(id: string) {

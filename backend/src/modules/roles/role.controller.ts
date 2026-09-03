@@ -21,8 +21,19 @@ const roleSelect = {
   _count: { select: { users: true } },
 } satisfies Prisma.RoleSelect;
 
-export const listRoles = asyncHandler(async (_req: Request, res: Response) => {
+export const listRoles = asyncHandler(async (req: Request, res: Response) => {
+  const roleName = (req.user?.roleName || "").toLowerCase();
+  const isSuperadminOrSpecial = roleName === "superadmin" || !!req.user?.isSpecialRole;
+
+  const where: Prisma.RoleWhereInput = isSuperadminOrSpecial
+    ? {}
+    : {
+        isSpecial: false,
+        name: { notIn: ["superadmin", "founder", "ceo", "cto", "coo", "cfo"], mode: "insensitive" },
+      };
+
   const roles = await prisma.role.findMany({
+    where,
     orderBy: [{ isSpecial: "asc" }, { priority: "asc" }],
     select: {
       ...roleSelect,

@@ -21,6 +21,7 @@ import {
   CheckCircle2,
   Clock,
   Trash2,
+  Pencil,
 } from "lucide-react";
 
 const pageVariants = {
@@ -36,7 +37,8 @@ const cardVariants = {
 export default function AnnouncementsPage() {
   const { user } = useAuth();
   const roleName = (typeof user?.role === "string" ? user.role : user?.role?.name || "").toUpperCase();
-  const isSuperAdminOrHR = ["SUPERADMIN", "HR_ADMIN", "ADMIN"].includes(roleName);
+  const isSuperAdmin = ["SUPERADMIN", "ADMIN"].includes(roleName) || user?.isSpecialRole;
+  const isSuperAdminOrHR = ["SUPERADMIN", "HR_ADMIN", "ADMIN", "HR"].includes(roleName) || user?.isSpecialRole;
 
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,6 +46,7 @@ export default function AnnouncementsPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
   const [selectedStatus, setSelectedStatus] = useState<string>("ALL");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [editingAnnouncement, setEditingAnnouncement] = useState<Announcement | null>(null);
 
   const loadAnnouncements = async () => {
     try {
@@ -252,16 +255,31 @@ export default function AnnouncementsPage() {
                         </div>
                       </div>
 
-                      {isSuperAdminOrHR && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDelete(item.id)}
-                          className="h-7 w-7 text-text-tertiary hover:text-error hover:bg-error/10"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
+                      <div className="flex items-center gap-1">
+                        {isSuperAdminOrHR && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Edit Announcement"
+                            onClick={() => setEditingAnnouncement(item)}
+                            className="h-7 w-7 text-text-tertiary hover:text-brand hover:bg-brand/10"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+
+                        {isSuperAdmin && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Delete Announcement"
+                            onClick={() => handleDelete(item.id)}
+                            className="h-7 w-7 text-text-tertiary hover:text-error hover:bg-error/10"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </Card>
                 </motion.div>
@@ -271,10 +289,14 @@ export default function AnnouncementsPage() {
         </div>
       )}
 
-      {/* Create Announcement Drawer */}
+      {/* Create / Edit Announcement Drawer */}
       <CreateAnnouncementSheet
-        isOpen={isCreateOpen}
-        onClose={() => setIsCreateOpen(false)}
+        isOpen={isCreateOpen || Boolean(editingAnnouncement)}
+        initialData={editingAnnouncement}
+        onClose={() => {
+          setIsCreateOpen(false);
+          setEditingAnnouncement(null);
+        }}
         onSuccess={loadAnnouncements}
       />
     </motion.div>

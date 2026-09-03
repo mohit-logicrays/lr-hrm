@@ -1,10 +1,13 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { AppError } from "../../utils/AppError";
+import { NotificationService } from "../notifications/notification.service";
 import type {
   CreatePolicyInput,
   UpdatePolicyInput,
 } from "./policy.schema";
+
+const notificationService = new NotificationService();
 
 const policySelect = {
   id: true,
@@ -97,7 +100,7 @@ export class PolicyService {
   }
 
   async create(authorId: string, data: CreatePolicyInput) {
-    return prisma.companyPolicy.create({
+    const policy = await prisma.companyPolicy.create({
       data: {
         title: data.title,
         code: data.code ?? null,
@@ -111,13 +114,39 @@ export class PolicyService {
       },
       select: policySelect,
     });
+
+    // Broadcast to all active users
+    (async () => {
+      try {
+        const users = await prisma.user.findMany({
+          where: { status: "ACTIVE" },
+          select: { id: true },
+        });
+        const userIds = users.map((u) => u.id);
+        if (userIds.length > 0) {
+          await notificationService.createMany(userIds, {
+            title: `New Policy Published: ${policy.title}`,
+            message: policy.isMandatory
+              ? `Action required: Please review and acknowledge the newly published policy.`
+              : `A new company policy "${policy.title}" has been published.`,
+            type: "POLICY",
+            referenceId: policy.id,
+            link: "/policies",
+          });
+        }
+      } catch (err) {
+        console.error("Failed to broadcast policy notification:", err);
+      }
+    })();
+
+    return policy;
   }
 
   async update(id: string, data: UpdatePolicyInput) {
     const existing = await prisma.companyPolicy.findUnique({ where: { id } });
     if (!existing) throw new AppError(404, "Policy not found");
 
-    return prisma.companyPolicy.update({
+    const updated = await prisma.companyPolicy.update({
       where: { id },
       data: {
         title: data.title,
@@ -131,6 +160,30 @@ export class PolicyService {
       },
       select: policySelect,
     });
+
+    // Broadcast update to all active users
+    (async () => {
+      try {
+        const users = await prisma.user.findMany({
+          where: { status: "ACTIVE" },
+          select: { id: true },
+        });
+        const userIds = users.map((u) => u.id);
+        if (userIds.length > 0) {
+          await notificationService.createMany(userIds, {
+            title: `Policy Updated: ${updated.title}`,
+            message: `The company policy "${updated.title}" has been updated (${updated.version}).`,
+            type: "POLICY",
+            referenceId: updated.id,
+            link: "/policies",
+          });
+        }
+      } catch (err) {
+        console.error("Failed to broadcast policy update notification:", err);
+      }
+    })();
+
+    return updated;
   }
 
   async acknowledge(policyId: string, userId: string) {

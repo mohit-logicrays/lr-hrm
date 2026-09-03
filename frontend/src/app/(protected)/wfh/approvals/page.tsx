@@ -22,10 +22,12 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { WFHApprovalDetailDrawer } from "@/components/wfh/WFHApprovalDetailDrawer";
+import { useAuth } from "@/providers/auth-provider";
 import { api, type WFHRequest, apiFileUrl } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 export default function WFHApprovalsPage() {
+  const { user } = useAuth();
   const [items, setItems] = useState<WFHRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -122,6 +124,7 @@ export default function WFHApprovalsPage() {
             ) : (
               pendingItems.map((item) => {
                 const name = `${item.user?.firstName || ""} ${item.user?.lastName || ""}`.trim() || item.user?.email;
+                const isOwn = user?.id === item.userId;
                 return (
                   <motion.div
                     key={item.id}
@@ -163,24 +166,26 @@ export default function WFHApprovalsPage() {
                       <span className="text-[10px] text-text-tertiary font-mono">
                         {new Date(item.createdAt).toLocaleDateString()}
                       </span>
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={(e) => handleQuickReject(item.id, e)}
-                          title="Reject"
-                          className="p-1 rounded-md text-error hover:bg-error/10 transition-colors cursor-pointer"
-                        >
-                          <Ban className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => handleQuickApprove(item.id, e)}
-                          title="Approve"
-                          className="p-1 rounded-md text-success hover:bg-success/10 transition-colors cursor-pointer"
-                        >
-                          <Check className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
+                      {!isOwn && (
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={(e) => handleQuickReject(item.id, e)}
+                            title="Reject"
+                            className="p-1 rounded-md text-error hover:bg-error/10 transition-colors cursor-pointer"
+                          >
+                            <Ban className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => handleQuickApprove(item.id, e)}
+                            title="Approve"
+                            className="p-1 rounded-md text-success hover:bg-success/10 transition-colors cursor-pointer"
+                          >
+                            <Check className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </motion.div>
                 );
@@ -287,7 +292,7 @@ export default function WFHApprovalsPage() {
       <WFHApprovalDetailDrawer
         request={selectedRequest}
         isOpen={detailDrawerOpen}
-        canAction={true}
+        canAction={Boolean(selectedRequest && user?.id && selectedRequest.userId !== user.id)}
         onClose={() => setDetailDrawerOpen(false)}
         onActionCompleted={() => loadApprovals()}
       />

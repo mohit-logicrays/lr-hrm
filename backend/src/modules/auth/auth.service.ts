@@ -17,6 +17,9 @@ interface LoginResult {
     email: string;
     role: string;
     specialRoleName: string | null;
+    avatarUrl?: string | null;
+    firstName?: string;
+    lastName?: string;
   };
   accessToken: string;
   refreshToken: string;

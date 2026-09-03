@@ -12,11 +12,20 @@ export class ApprovalEngine {
     });
     if (targetEmployment?.reportingManagerId === approverId || targetEmployment?.projectManagerId === approverId) return true;
 
-    const ledTeams = await prisma.team.findMany({
-      where: { leadId: approverId, deletedAt: null },
-      select: { members: { where: { userId: targetUserId }, select: { userId: true } } },
+    const ledTeamMembers = await prisma.teamMember.findMany({
+      where: { userId: approverId, isTeamLead: true, team: { deletedAt: null } },
+      select: {
+        team: {
+          select: {
+            members: {
+              where: { userId: targetUserId },
+              select: { userId: true },
+            },
+          },
+        },
+      },
     });
-    if (ledTeams.some((t) => t.members.length > 0)) return true;
+    if (ledTeamMembers.some((tm) => (tm.team?.members?.length ?? 0) > 0)) return true;
 
     const managedProjects = await prisma.project.findMany({
       where: { projectManagerId: approverId, deletedAt: null },
@@ -30,14 +39,14 @@ export class ApprovalEngine {
   async getSupervisedUserIds(approverId: string, approverRoleName: string, isSpecialRole = false): Promise<string[] | null> {
     if (isSpecialRole || ["superadmin", "hr"].includes(approverRoleName.toLowerCase())) return null;
 
-    const [managedEmployments, ledTeams, managedProjects] = await Promise.all([
+    const [managedEmployments, ledTeamMembers, managedProjects] = await Promise.all([
       prisma.userCurrentEmployment.findMany({
         where: { OR: [{ reportingManagerId: approverId }, { projectManagerId: approverId }] },
         select: { userId: true },
       }),
-      prisma.team.findMany({
-        where: { leadId: approverId, deletedAt: null },
-        select: { members: { select: { userId: true } } },
+      prisma.teamMember.findMany({
+        where: { userId: approverId, isTeamLead: true, team: { deletedAt: null } },
+        select: { team: { select: { members: { select: { userId: true } } } } },
       }),
       prisma.project.findMany({
         where: { projectManagerId: approverId, deletedAt: null },
@@ -47,7 +56,7 @@ export class ApprovalEngine {
 
     const userIds = new Set<string>();
     managedEmployments.forEach((e) => userIds.add(e.userId));
-    ledTeams.forEach((t) => t.members.forEach((m) => userIds.add(m.userId)));
+    ledTeamMembers.forEach((tm) => tm.team?.members.forEach((m) => userIds.add(m.userId)));
     managedProjects.forEach((p) => p.members.forEach((m) => userIds.add(m.userId)));
     userIds.delete(approverId);
     return Array.from(userIds);

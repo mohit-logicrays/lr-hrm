@@ -40,17 +40,6 @@ const ROLE_SEEDS: RoleSeed[] = [
       PERMISSIONS.USER_MANAGE,
       PERMISSIONS.ROLE_READ,
       PERMISSIONS.PERMISSION_READ,
-      PERMISSIONS.DEPARTMENT_CREATE,
-      PERMISSIONS.DEPARTMENT_READ,
-      PERMISSIONS.DEPARTMENT_UPDATE,
-      PERMISSIONS.DEPARTMENT_DELETE,
-      PERMISSIONS.TEAM_CREATE,
-      PERMISSIONS.TEAM_READ,
-      PERMISSIONS.TEAM_UPDATE,
-      PERMISSIONS.TEAM_DELETE,
-      PERMISSIONS.TEAM_MANAGE_MEMBERS,
-      PERMISSIONS.TEAM_MANAGE_LEADS,
-      PERMISSIONS.PROJECT_READ,
       PERMISSIONS.TIME_LOG_CREATE,
       PERMISSIONS.TIME_LOG_READ_OWN,
       PERMISSIONS.TIME_LOG_READ_ALL,
@@ -67,9 +56,7 @@ const ROLE_SEEDS: RoleSeed[] = [
       PERMISSIONS.HOLIDAY_READ,
       PERMISSIONS.HOLIDAY_MANAGE,
       PERMISSIONS.ANNOUNCEMENT_READ,
-      PERMISSIONS.ANNOUNCEMENT_MANAGE,
       PERMISSIONS.POLICY_READ,
-      PERMISSIONS.POLICY_MANAGE,
       PERMISSIONS.SUPPORT_CREATE,
       PERMISSIONS.SUPPORT_READ_OWN,
       PERMISSIONS.SUPPORT_READ_ALL,
@@ -215,6 +202,7 @@ async function seedRoles(): Promise<void> {
           priority: role.priority,
         },
       });
+      await prisma.rolePermission.deleteMany({ where: { roleId: existing.id } });
       if (role.permissions.length > 0) {
         const permissions = await prisma.permission.findMany({
           where: { key: { in: role.permissions } },

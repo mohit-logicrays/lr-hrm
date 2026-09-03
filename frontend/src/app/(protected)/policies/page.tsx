@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import { api, type CompanyPolicy, type PolicyCategory } from "@/lib/api";
+import { api, apiFileUrl, type CompanyPolicy, type PolicyCategory } from "@/lib/api";
 import { useAuth } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -27,6 +27,7 @@ import {
   ExternalLink,
   Trash2,
   Eye,
+  Pencil,
 } from "lucide-react";
 
 const pageVariants = {
@@ -37,13 +38,15 @@ const pageVariants = {
 export default function PoliciesPage() {
   const { user } = useAuth();
   const roleName = (typeof user?.role === "string" ? user.role : user?.role?.name || "").toUpperCase();
-  const isSuperAdminOrHR = ["SUPERADMIN", "HR_ADMIN", "ADMIN"].includes(roleName);
+  const isSuperAdmin = ["SUPERADMIN", "ADMIN"].includes(roleName) || user?.isSpecialRole;
+  const isSuperAdminOrHR = ["SUPERADMIN", "HR_ADMIN", "ADMIN", "HR"].includes(roleName) || user?.isSpecialRole;
 
   const [policies, setPolicies] = useState<CompanyPolicy[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [editingPolicy, setEditingPolicy] = useState<CompanyPolicy | null>(null);
   const [inspectPolicy, setInspectPolicy] = useState<CompanyPolicy | null>(null);
   const [acknowledging, setAcknowledging] = useState(false);
 
@@ -214,7 +217,7 @@ export default function PoliciesPage() {
                       })}
                     </td>
 
-                    <td className="py-3.5 px-6 text-right space-x-2">
+                    <td className="py-3.5 px-6 text-right space-x-1.5">
                       <Button
                         variant="outline"
                         size="sm"
@@ -228,6 +231,19 @@ export default function PoliciesPage() {
                         <Button
                           variant="ghost"
                           size="icon"
+                          title="Edit Policy"
+                          onClick={() => setEditingPolicy(p)}
+                          className="h-7 w-7 text-text-tertiary hover:text-brand hover:bg-brand/10"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+
+                      {isSuperAdmin && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Delete Policy"
                           onClick={() => handleDelete(p.id)}
                           className="h-7 w-7 text-text-tertiary hover:text-error hover:bg-error/10"
                         >
@@ -274,17 +290,17 @@ export default function PoliciesPage() {
                   <div className="flex items-center gap-2">
                     <FileText className="h-5 w-5 text-brand" />
                     <div>
-                      <p className="font-bold text-xs text-text-primary">Attachment Document</p>
-                      <p className="text-[10px] text-text-tertiary truncate max-w-xs">{inspectPolicy.fileUrl}</p>
+                      <p className="font-bold text-xs text-text-primary">Policy PDF Document</p>
+                      <p className="text-[10px] text-text-tertiary truncate max-w-xs">{inspectPolicy.fileUrl.split("/").pop()}</p>
                     </div>
                   </div>
                   <a
-                    href={inspectPolicy.fileUrl}
+                    href={apiFileUrl(inspectPolicy.fileUrl)}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand text-white text-xs font-bold hover:bg-brand/90"
                   >
-                    Download PDF <ExternalLink className="h-3.5 w-3.5" />
+                    View / Download PDF <ExternalLink className="h-3.5 w-3.5" />
                   </a>
                 </div>
               )}
@@ -323,10 +339,14 @@ export default function PoliciesPage() {
         </SheetContent>
       </Sheet>
 
-      {/* Create Policy Drawer */}
+      {/* Create / Edit Policy Drawer */}
       <CreatePolicySheet
-        isOpen={isCreateOpen}
-        onClose={() => setIsCreateOpen(false)}
+        isOpen={isCreateOpen || Boolean(editingPolicy)}
+        initialData={editingPolicy}
+        onClose={() => {
+          setIsCreateOpen(false);
+          setEditingPolicy(null);
+        }}
         onSuccess={loadPolicies}
       />
     </motion.div>

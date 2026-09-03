@@ -14,19 +14,20 @@ router.post("/:id/acknowledge", policyController.acknowledgePolicy);
 // HR / Superadmin / Admin Only Endpoints
 router.post(
   "/",
-  requireRoles("SUPERADMIN", "HR_ADMIN", "ADMIN", "superadmin", "hr_admin", "admin"),
+  requireRoles("SUPERADMIN", "HR_ADMIN", "ADMIN", "HR", "superadmin", "hr_admin", "admin", "hr"),
   policyController.createPolicy
 );
 
 router.patch(
   "/:id",
-  requireRoles("SUPERADMIN", "HR_ADMIN", "ADMIN", "superadmin", "hr_admin", "admin"),
+  requireRoles("SUPERADMIN", "HR_ADMIN", "ADMIN", "HR", "superadmin", "hr_admin", "admin", "hr"),
   policyController.updatePolicy
 );
 
+// Only Superadmin can Delete Policies
 router.delete(
   "/:id",
-  requireRoles("SUPERADMIN", "HR_ADMIN", "ADMIN", "superadmin", "hr_admin", "admin"),
+  requireRoles("SUPERADMIN", "superadmin"),
   policyController.deletePolicy
 );
 

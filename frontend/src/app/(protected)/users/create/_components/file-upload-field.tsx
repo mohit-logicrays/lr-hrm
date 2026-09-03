@@ -15,6 +15,7 @@ interface FileUploadFieldProps {
   preview?: "image" | "none";
   label?: React.ReactNode;
   folder?: string;
+  maxSizeBytes?: number;
 }
 
 export function FileUploadField({
@@ -26,11 +27,23 @@ export function FileUploadField({
   preview = "none",
   label = "Upload file",
   folder = "documents",
+  maxSizeBytes = 10 * 1024 * 1024,
 }: FileUploadFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
   async function handleFile(file: File) {
+    if (maxSizeBytes && file.size > maxSizeBytes) {
+      const maxMb = Math.round(maxSizeBytes / (1024 * 1024));
+      toast.error(`File size exceeds the limit of ${maxMb}MB`);
+      return;
+    }
+
+    if (accept.includes("application/pdf") && !accept.includes("image") && file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      toast.error("Invalid file format. Only PDF documents are allowed.");
+      return;
+    }
+
     setUploading(true);
     try {
       const res = await api.uploadFile(file, folder);
@@ -111,38 +124,53 @@ export function FileUploadField({
 
   return (
     <div className={cn("space-y-2", className)}>
-      <label
-        className="flex cursor-pointer items-center justify-between gap-2 rounded-md border border-dashed border-border-base bg-surface-subtle/40 px-3 py-2.5 text-xs text-text-primary transition-colors hover:border-brand/50 hover:bg-surface-subtle"
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => {
-          e.preventDefault();
-          const file = e.dataTransfer?.files?.[0];
-          if (file) handleFile(file);
-        }}
-      >
-        <span className="flex items-center gap-2 min-w-0">
-          {uploading ? (
-            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-brand" />
-          ) : value ? (
-            <FileText className="h-3.5 w-3.5 shrink-0 text-success" />
-          ) : (
-            <Upload className="h-3.5 w-3.5 shrink-0 text-brand" />
-          )}
-          <span className="truncate">{uploading ? "Uploading…" : value ? "Uploaded ✓" : label}</span>
-        </span>
-        <input
-          ref={inputRef}
-          type="file"
-          className="hidden"
-          accept={accept}
-          disabled={uploading}
-          onChange={(e) => {
-            const file = e.target.files?.[0];
+      <div className="flex items-center gap-2">
+        <label
+          className="flex-1 flex cursor-pointer items-center justify-between gap-2 rounded-lg border border-dashed border-border-base bg-surface-subtle/40 px-3 py-2.5 text-xs text-text-primary transition-colors hover:border-brand/50 hover:bg-surface-subtle"
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            const file = e.dataTransfer?.files?.[0];
             if (file) handleFile(file);
-            e.currentTarget.value = "";
           }}
-        />
-      </label>
+        >
+          <span className="flex items-center gap-2 min-w-0">
+            {uploading ? (
+              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-brand" />
+            ) : value ? (
+              <FileText className="h-3.5 w-3.5 shrink-0 text-success" />
+            ) : (
+              <Upload className="h-3.5 w-3.5 shrink-0 text-brand" />
+            )}
+            <span className="truncate font-medium">
+              {uploading ? "Uploading…" : value ? value.split("/").pop() || "Document attached ✓" : label}
+            </span>
+          </span>
+          <input
+            ref={inputRef}
+            type="file"
+            className="hidden"
+            accept={accept}
+            disabled={uploading}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleFile(file);
+              e.currentTarget.value = "";
+            }}
+          />
+        </label>
+
+        {value && onClear && (
+          <button
+            type="button"
+            onClick={onClear}
+            className="h-9 w-9 shrink-0 flex items-center justify-center rounded-lg border border-border-base text-text-tertiary hover:text-error hover:bg-error/10 hover:border-error/30 transition-colors cursor-pointer"
+            title="Remove attachment"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
     </div>
   );
 }

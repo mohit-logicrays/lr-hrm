@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { api, type PolicyCategory } from "@/lib/api";
+import { api, type CompanyPolicy, type PolicyCategory } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -11,17 +11,20 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import { ScrollText, Tag, Link as LinkIcon, ShieldCheck } from "lucide-react";
+import { ScrollText, Tag, FileText, ShieldCheck } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
+import { FileUploadField } from "@/app/(protected)/users/create/_components/file-upload-field";
 
 interface CreatePolicySheetProps {
   isOpen: boolean;
+  initialData?: CompanyPolicy | null;
   onClose: () => void;
   onSuccess: () => void;
 }
 
 export function CreatePolicySheet({
   isOpen,
+  initialData,
   onClose,
   onSuccess,
 }: CreatePolicySheetProps) {
@@ -34,6 +37,26 @@ export function CreatePolicySheet({
   const [fileUrl, setFileUrl] = useState("");
   const [isMandatory, setIsMandatory] = useState(false);
 
+  useEffect(() => {
+    if (initialData && isOpen) {
+      setTitle(initialData.title || "");
+      setCode(initialData.code || "");
+      setCategory(initialData.category || "HR");
+      setVersion(initialData.version || "v2026.1");
+      setContent(initialData.content || "");
+      setFileUrl(initialData.fileUrl || "");
+      setIsMandatory(Boolean(initialData.isMandatory));
+    } else if (!initialData && isOpen) {
+      setTitle("");
+      setCode("");
+      setCategory("HR");
+      setVersion("v2026.1");
+      setContent("");
+      setFileUrl("");
+      setIsMandatory(false);
+    }
+  }, [initialData, isOpen]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !content.trim()) {
@@ -43,17 +66,29 @@ export function CreatePolicySheet({
 
     try {
       setLoading(true);
-      await api.createPolicy({
-        title,
-        code: code || null,
-        category,
-        version,
-        content,
-        fileUrl: fileUrl || null,
-        isMandatory,
-      });
-
-      toast.success("Policy created successfully");
+      if (initialData) {
+        await api.updatePolicy(initialData.id, {
+          title,
+          code: code || null,
+          category,
+          version,
+          content,
+          fileUrl: fileUrl || null,
+          isMandatory,
+        });
+        toast.success("Policy updated successfully");
+      } else {
+        await api.createPolicy({
+          title,
+          code: code || null,
+          category,
+          version,
+          content,
+          fileUrl: fileUrl || null,
+          isMandatory,
+        });
+        toast.success("Policy created successfully");
+      }
       setTitle("");
       setCode("");
       setCategory("HR");
@@ -76,10 +111,12 @@ export function CreatePolicySheet({
         <SheetHeader className="pb-4 border-b border-border-base">
           <SheetTitle className="font-heading text-xl font-bold text-text-primary flex items-center gap-2">
             <ScrollText className="h-5 w-5 text-brand" />
-            Add Company Policy
+            {initialData ? "Edit Company Policy" : "Add Company Policy"}
           </SheetTitle>
           <SheetDescription className="text-xs text-text-tertiary">
-            Create standard operating procedures, compliance guidelines, and HR policies.
+            {initialData
+              ? "Update policy guidelines, version, or content."
+              : "Create standard operating procedures, compliance guidelines, and HR policies."}
           </SheetDescription>
         </SheetHeader>
 
@@ -150,17 +187,23 @@ export function CreatePolicySheet({
             />
           </div>
 
-          {/* File URL / Document Attachment */}
+          {/* PDF Document Attachment with File Size & Type Validation */}
           <div className="space-y-1.5">
-            <label className="font-semibold text-xs text-text-primary flex items-center gap-1">
-              <LinkIcon className="h-3.5 w-3.5 text-brand" /> PDF Document Link (Optional)
+            <label className="font-semibold text-xs text-text-primary flex items-center justify-between">
+              <span className="flex items-center gap-1">
+                <FileText className="h-3.5 w-3.5 text-brand" /> Policy PDF Document (Optional)
+              </span>
+              <span className="text-[10px] text-text-tertiary font-mono">Max 10MB • .pdf only</span>
             </label>
-            <input
-              type="url"
-              className="w-full h-10 px-3 rounded-lg border border-border-base bg-surface text-text-primary text-xs focus:border-brand focus:outline-none font-mono"
-              placeholder="https://.../policy.pdf"
+
+            <FileUploadField
               value={fileUrl}
-              onChange={(e) => setFileUrl(e.target.value)}
+              onChange={(url) => setFileUrl(url)}
+              onClear={() => setFileUrl("")}
+              accept="application/pdf,.pdf"
+              maxSizeBytes={10 * 1024 * 1024}
+              folder="policies"
+              label="Upload Policy PDF (max 10MB)"
             />
           </div>
 
@@ -186,7 +229,7 @@ export function CreatePolicySheet({
               Cancel
             </Button>
             <Button type="submit" className="bg-brand hover:bg-brand/90 text-white font-bold" disabled={loading}>
-              {loading ? "Saving..." : "Add Policy"}
+              {loading ? "Saving..." : initialData ? "Save Changes" : "Add Policy"}
             </Button>
           </div>
         </form>

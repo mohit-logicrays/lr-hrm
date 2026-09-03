@@ -17,6 +17,7 @@ const ALLOWED_FOLDERS = new Set([
   "avatars",
   "experience-letters",
   "relieving-letters",
+  "policies",
   "documents",
 ]);
 

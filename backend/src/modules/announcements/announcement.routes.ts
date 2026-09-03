@@ -13,19 +13,20 @@ router.get("/:id", announcementController.getAnnouncement);
 // HR / Superadmin / Admin Only Endpoints
 router.post(
   "/",
-  requireRoles("SUPERADMIN", "HR_ADMIN", "ADMIN", "superadmin", "hr_admin", "admin"),
+  requireRoles("SUPERADMIN", "HR_ADMIN", "ADMIN", "HR", "superadmin", "hr_admin", "admin", "hr"),
   announcementController.createAnnouncement
 );
 
 router.patch(
   "/:id",
-  requireRoles("SUPERADMIN", "HR_ADMIN", "ADMIN", "superadmin", "hr_admin", "admin"),
+  requireRoles("SUPERADMIN", "HR_ADMIN", "ADMIN", "HR", "superadmin", "hr_admin", "admin", "hr"),
   announcementController.updateAnnouncement
 );
 
+// Only Superadmin can Delete Announcements
 router.delete(
   "/:id",
-  requireRoles("SUPERADMIN", "HR_ADMIN", "ADMIN", "superadmin", "hr_admin", "admin"),
+  requireRoles("SUPERADMIN", "superadmin"),
   announcementController.deleteAnnouncement
 );
 
