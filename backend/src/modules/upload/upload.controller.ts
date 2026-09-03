@@ -5,6 +5,7 @@ import { Request, Response } from "express";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { ApiResponse } from "../../utils/ApiResponse";
 import { AppError } from "../../utils/AppError";
+import { config } from "../../config";
 
 const uploadRootDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadRootDir)) {
@@ -37,10 +38,10 @@ function resolveFolder(folder?: string): string {
   return ALLOWED_FOLDERS.has(slug) ? slug : "documents";
 }
 
-// Storage Engine — resolves the destination per-request from `body.folder`.
+// Storage Engine — resolves the destination per-request from `body.folder` or `query.folder`.
 const storage = multer.diskStorage({
   destination: (req, _file, cb) => {
-    const folder = resolveFolder(req.body?.folder);
+    const folder = resolveFolder((req.body?.folder as string) || (req.query?.folder as string));
     const dir = path.join(uploadRootDir, folder);
     fs.mkdirSync(dir, { recursive: true });
     cb(null, dir);
@@ -87,10 +88,12 @@ export const handleSingleUpload = asyncHandler(async (req: Request, res: Respons
     throw new AppError(400, "No file uploaded");
   }
 
-  const folder = resolveFolder(req.body?.folder);
-  const fileUrl = `/uploads/${folder}/${req.file.filename}`;
+  const folder = resolveFolder((req.body?.folder as string) || (req.query?.folder as string));
+  const relativePath = `/uploads/${folder}/${req.file.filename}`;
+  const absoluteUrl = `${config.apiUrl}${relativePath}`;
   ApiResponse.success(res, 200, "File uploaded successfully", {
-    url: fileUrl,
+    url: absoluteUrl,
+    relativePath,
     filename: req.file.filename,
     folder,
     originalName: req.file.originalname,

@@ -1,6 +1,8 @@
 import { motion } from "framer-motion";
 import { CalendarClock, UserCheck, Mail, ShieldCheck, BadgeCheck, Baby } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { apiFileUrl } from "@/lib/api";
 import { Field } from "./field-error";
 import type { WizardFormData, WizardLookups, WizardErrors } from "./types";
 
@@ -58,10 +60,20 @@ export function ReviewStep({ formData, lookups, errors, update, autoProbationEnd
       </motion.div>
 
       <motion.div variants={item} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="space-y-1.5 rounded-lg border border-border-base bg-surface-subtle/30 p-3">
-          <h4 className="flex items-center gap-1.5 font-heading text-xs font-bold uppercase tracking-wide text-text-primary">
-            <UserCheck className="h-3.5 w-3.5 text-brand" /> 1. Basic Identity
-          </h4>
+        <div className="space-y-2 rounded-lg border border-border-base bg-surface-subtle/30 p-3">
+          <div className="flex items-center justify-between">
+            <h4 className="flex items-center gap-1.5 font-heading text-xs font-bold uppercase tracking-wide text-text-primary">
+              <UserCheck className="h-3.5 w-3.5 text-brand" /> 1. Basic Identity
+            </h4>
+            {formData.avatarUrl && (
+              <Avatar className="h-9 w-9 border border-border-base shadow-2xs">
+                <AvatarImage src={apiFileUrl(formData.avatarUrl)} className="object-cover" />
+                <AvatarFallback className="text-xs bg-brand/10 text-brand font-bold font-mono">
+                  {formData.firstName?.[0] || "U"}
+                </AvatarFallback>
+              </Avatar>
+            )}
+          </div>
           <ReviewRow label="Name" value={`${formData.firstName} ${formData.lastName}`} />
           <ReviewRow label="Official Email" value={formData.officialEmail} />
           <ReviewRow label="Mobile" value={formData.mobile} />

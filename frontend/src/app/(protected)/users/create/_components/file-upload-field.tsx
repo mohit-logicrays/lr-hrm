@@ -43,6 +43,72 @@ export function FileUploadField({
     }
   }
 
+  if (preview === "image") {
+    return (
+      <div className={cn("flex items-center gap-4", className)}>
+        {/* Avatar / Image Preview Box */}
+        <div className="relative h-16 w-16 shrink-0 rounded-full border-2 border-border-base bg-surface overflow-hidden shadow-2xs group">
+          {value ? (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={apiFileUrl(value)}
+                alt="Profile Preview"
+                className="h-full w-full object-cover"
+              />
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onClear) onClear();
+                  if (inputRef.current) inputRef.current.value = "";
+                }}
+                className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity cursor-pointer"
+                aria-label="Remove image"
+                title="Remove photo"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </>
+          ) : (
+            <div className="h-full w-full flex items-center justify-center bg-surface-subtle text-text-tertiary">
+              <Upload className="h-5 w-5 opacity-40" />
+            </div>
+          )}
+        </div>
+
+        {/* Upload Trigger Button & Info */}
+        <div className="flex-1 space-y-1">
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border-base bg-surface px-3 py-1.5 text-xs font-semibold text-text-primary shadow-2xs hover:bg-surface-subtle hover:border-brand/40 transition-colors">
+            {uploading ? (
+              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-brand" />
+            ) : (
+              <Upload className="h-3.5 w-3.5 shrink-0 text-brand" />
+            )}
+            <span>{uploading ? "Uploading photo..." : value ? "Change Photo" : label}</span>
+            <input
+              ref={inputRef}
+              type="file"
+              className="hidden"
+              accept={accept}
+              disabled={uploading}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleFile(file);
+                e.currentTarget.value = "";
+              }}
+            />
+          </label>
+          {value && (
+            <p className="text-[10px] text-success font-medium flex items-center gap-1">
+              ✓ Photo uploaded & attached
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={cn("space-y-2", className)}>
       <label
@@ -69,6 +135,7 @@ export function FileUploadField({
           type="file"
           className="hidden"
           accept={accept}
+          disabled={uploading}
           onChange={(e) => {
             const file = e.target.files?.[0];
             if (file) handleFile(file);
@@ -76,24 +143,6 @@ export function FileUploadField({
           }}
         />
       </label>
-
-      {preview === "image" && value && (
-        <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-full border border-border-base bg-surface-subtle">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={apiFileUrl(value)} alt="Preview" className="h-full w-full object-cover" />
-          <button
-            type="button"
-            onClick={() => {
-              if (onClear) onClear();
-              if (inputRef.current) inputRef.current.value = "";
-            }}
-            className="absolute right-0 top-0 flex h-4 w-4 items-center justify-center rounded-full bg-error text-white"
-            aria-label="Remove upload"
-          >
-            <X className="h-2.5 w-2.5" />
-          </button>
-        </div>
-      )}
     </div>
   );
 }

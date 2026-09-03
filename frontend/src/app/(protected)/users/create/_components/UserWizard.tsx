@@ -160,24 +160,33 @@ export function UserWizard({ mode, userId, initialData }: UserWizardProps) {
       setTeams(tRes.data);
       setManagers(uRes.data);
 
-      // Pre-select defaults if empty (only meaningful on create)
-      setFormData((f) => ({
-        ...f,
-        roleId: f.roleId || rRes.data[0]?.id || "",
-        departmentId: f.departmentId || dRes.data[0]?.id || "",
-        primaryTeamId: f.primaryTeamId || tRes.data[0]?.id || "",
-        reportingManagerId: f.reportingManagerId || uRes.data[0]?.id || "",
-      }));
+      // Pre-select defaults if empty (only meaningful on create mode)
+      if (!isEdit) {
+        setFormData((f) => ({
+          ...f,
+          roleId: f.roleId || rRes.data[0]?.id || "",
+          departmentId: f.departmentId || dRes.data[0]?.id || "",
+          primaryTeamId: f.primaryTeamId || tRes.data[0]?.id || "",
+          reportingManagerId: f.reportingManagerId || uRes.data[0]?.id || "",
+        }));
+      }
     } catch {
       toast.error("Failed to load organization dropdowns");
     } finally {
       setLoadingLookups(false);
     }
-  }, []);
+  }, [isEdit]);
 
   useEffect(() => {
     loadLookups();
   }, [loadLookups]);
+
+  // Synchronize state when initialData updates (e.g. loaded async on edit page)
+  useEffect(() => {
+    if (initialData) {
+      setFormData(initialData);
+    }
+  }, [initialData]);
 
   // Load the caller's saved drafts for the "Load Draft" picker (create only)
   const loadMyDrafts = useCallback(async () => {

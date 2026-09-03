@@ -32,7 +32,11 @@ import path from "path";
 
 const app = express();
 
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
 app.use(
   cors({
     origin: config.clientUrl,
@@ -42,7 +46,15 @@ app.use(
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+app.use(
+  "/uploads",
+  express.static(path.join(process.cwd(), "uploads"), {
+    setHeaders: (res) => {
+      res.setHeader("Access-Control-Allow-Origin", config.clientUrl);
+      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    },
+  })
+);
 
 app.use(requestLogger);
 

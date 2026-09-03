@@ -1,7 +1,6 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { format } from "date-fns";
 import { Check, Clock, X, AlertCircle, User, MessageSquare } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { type ApprovalLogItem, apiFileUrl } from "@/lib/api";

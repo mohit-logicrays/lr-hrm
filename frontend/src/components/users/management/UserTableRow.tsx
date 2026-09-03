@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { User, UserStatus, apiFileUrl } from "@/lib/api";
 import { TableCell, TableRow } from "@/components/ui/table";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -92,17 +93,18 @@ export function UserTableRow({
       {/* Name & Email */}
       <TableCell>
         <div className="flex items-center gap-3">
-          {user.avatarUrl ? (
-            <img
-              src={apiFileUrl(user.avatarUrl)}
-              alt={nameStr}
-              className="w-9 h-9 rounded-full object-cover border border-border-base shrink-0"
-            />
-          ) : (
-            <div className="w-9 h-9 rounded-full bg-brand/10 text-brand flex items-center justify-center font-bold text-xs border border-brand/20 shrink-0 font-mono">
+          <Avatar className="w-9 h-9 border border-border-base shrink-0">
+            {user.avatarUrl && (
+              <AvatarImage
+                src={apiFileUrl(user.avatarUrl)}
+                alt={nameStr}
+                className="object-cover"
+              />
+            )}
+            <AvatarFallback className="bg-brand/10 text-brand font-bold text-xs font-mono">
               {getInitials(nameStr)}
-            </div>
-          )}
+            </AvatarFallback>
+          </Avatar>
           <div>
             <p className="font-semibold text-xs text-text-primary font-heading flex items-center gap-1.5">
               {nameStr}

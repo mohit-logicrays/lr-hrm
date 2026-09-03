@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { User, UserStatus, apiFileUrl } from "@/lib/api";
 import { Card } from "@/components/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -181,17 +182,18 @@ export function UserCard({
         {/* Center: Profile Picture & Name */}
         <div className="flex flex-col items-center text-center mb-4">
           <div className="relative mb-3">
-            {user.avatarUrl ? (
-              <img
-                src={apiFileUrl(user.avatarUrl)}
-                alt={nameStr}
-                className="w-16 h-16 rounded-full object-cover border-2 border-border-base shadow-2xs"
-              />
-            ) : (
-              <div className="w-16 h-16 rounded-full bg-brand/10 text-brand flex items-center justify-center font-bold text-lg border border-brand/20 shadow-2xs font-mono">
+            <Avatar className="w-16 h-16 border-2 border-border-base shadow-2xs">
+              {user.avatarUrl && (
+                <AvatarImage
+                  src={apiFileUrl(user.avatarUrl)}
+                  alt={nameStr}
+                  className="object-cover"
+                />
+              )}
+              <AvatarFallback className="bg-brand/10 text-brand font-bold text-lg font-mono">
                 {getInitials(nameStr)}
-              </div>
-            )}
+              </AvatarFallback>
+            </Avatar>
           </div>
 
           <h3 className="font-heading text-sm font-bold text-text-primary tracking-tight">

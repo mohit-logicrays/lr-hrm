@@ -25,4 +25,5 @@ export const config = {
   defaultPassword: process.env.DEFAULT_USER_PASSWORD || "LogicRays@2026",
 
   clientUrl: process.env.CLIENT_URL || "http://localhost:3000",
+  apiUrl: process.env.API_URL || `http://localhost:${process.env.PORT || "5000"}`,
 } as const;

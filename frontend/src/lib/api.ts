@@ -761,13 +761,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-function qs(params: Record<string, string | number | undefined | null>) {
-  const url = new URLSearchParams();
-  for (const [k, v] of Object.entries(params)) {
-    if (v !== undefined && v !== null && v !== "") url.set(k, String(v));
-  }
-  const s = url.toString();
-  return s ? `?${s}` : "";
+function qs(params: Record<string, string | number | boolean | undefined | null>) {
+  const entries = Object.entries(params).filter(
+    ([, v]) => v !== undefined && v !== null && v !== ""
+  );
+  if (entries.length === 0) return "";
+  const query = new URLSearchParams(
+    entries.map(([k, v]) => [k, String(v)])
+  ).toString();
+  return `?${query}`;
 }
 
 export const api = {
@@ -835,9 +837,10 @@ export const api = {
 
   uploadFile: async (file: File, folder?: string) => {
     const formData = new FormData();
-    formData.append("file", file);
     if (folder) formData.append("folder", folder);
-    const res = await fetch(`${API_BASE}/api/v1/upload`, {
+    formData.append("file", file);
+    const folderParam = folder ? `?folder=${encodeURIComponent(folder)}` : "";
+    const res = await fetch(`${API_BASE}/api/v1/upload${folderParam}`, {
       method: "POST",
       body: formData,
       credentials: "include",

@@ -84,9 +84,12 @@ export class AuthService {
       user: {
         id: user.id,
         name: `${user.firstName} ${user.lastName}`.trim(),
+        firstName: user.firstName,
+        lastName: user.lastName,
         email: user.email,
         role: user.role.name,
         specialRoleName: user.specialRoleName,
+        avatarUrl: user.avatarUrl,
       },
       accessToken,
       refreshToken,
@@ -145,9 +148,12 @@ export class AuthService {
       user: {
         id: user.id,
         name: `${user.firstName} ${user.lastName}`.trim(),
+        firstName: user.firstName,
+        lastName: user.lastName,
         email: user.email,
         role: user.role.name,
         specialRoleName: user.specialRoleName,
+        avatarUrl: user.avatarUrl,
       },
       accessToken: newAccessToken,
       refreshToken: newRefreshToken,
@@ -159,6 +165,8 @@ export class AuthService {
     user: {
       id: string;
       name: string;
+      firstName: string;
+      lastName: string;
       email: string;
       role: string;
       designation: string | null;
@@ -166,6 +174,7 @@ export class AuthService {
       departmentId: string | null;
       isSpecialRole: boolean;
       specialRoleName: string | null;
+      avatarUrl: string | null;
     };
     permissions: Record<string, Record<string, boolean>>;
     permissionKeys: string[];
@@ -183,6 +192,8 @@ export class AuthService {
       user: {
         id: user.id,
         name: `${user.firstName} ${user.lastName}`.trim(),
+        firstName: user.firstName,
+        lastName: user.lastName,
         email: user.email,
         role: user.role.name,
         designation: user.designation,
@@ -190,6 +201,7 @@ export class AuthService {
         departmentId: user.departmentId,
         isSpecialRole: user.isSpecialRole,
         specialRoleName: user.specialRoleName,
+        avatarUrl: user.avatarUrl,
       },
       permissions: groupPermissionsByResource(keys),
       permissionKeys: keys,
