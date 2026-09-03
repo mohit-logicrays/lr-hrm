@@ -62,11 +62,12 @@ export function StartStopTimerWidget({ onSaveLog }: StartStopTimerWidgetProps) {
 
   function handleStopAndSave() {
     setIsRunning(false);
-    if (seconds < 60) {
-      toast.warning("Timer duration is less than 1 minute");
+    if (seconds <= 0) {
+      toast.warning("Please start the timer first");
+      return;
     }
 
-    const calculatedHours = Number((seconds / 3600).toFixed(2)) || 0.1;
+    const calculatedHours = Number((seconds / 3600).toFixed(4));
     const today = new Date().toISOString().split("T")[0];
 
     onSaveLog(today, calculatedHours, selectedProjectId, description || "Live Timer Entry");

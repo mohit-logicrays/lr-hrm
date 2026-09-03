@@ -14,7 +14,7 @@ import {
   Clock,
   RotateCcw,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatSecondsToHMS } from "@/lib/utils";
 
 export interface SmartTimeTrackerWidgetProps {
   variants?: Variants;
@@ -173,17 +173,20 @@ export function SmartTimeTrackerWidget({
   }
 
   async function handleStopAndSave() {
-    if (elapsedSeconds < 30) {
-      toast.warning("Time tracked is less than 30 seconds");
+    if (elapsedSeconds <= 0) {
+      toast.warning("Please start the timer first");
+      return;
     }
 
     setSaving(true);
-    const calculatedHours = Number((Math.max(elapsedSeconds, 60) / 3600).toFixed(2));
     const today = new Date().toISOString().split("T")[0];
+    const durationSec = Math.max(1, elapsedSeconds);
+    const calculatedHours = Number((durationSec / 3600).toFixed(4));
 
     try {
       await api.createTimeLog({
         date: today,
+        durationSec,
         hours: calculatedHours,
         projectId: selectedProjectId || undefined,
         taskId: selectedTaskId || undefined,
@@ -191,7 +194,7 @@ export function SmartTimeTrackerWidget({
         isBillable: true,
       });
 
-      toast.success(`Logged ${calculatedHours}h successfully`);
+      toast.success(`Logged ${formatSecondsToHMS(durationSec)} successfully`);
       setIsRunning(false);
       setRemainingSeconds(defaultDurationSeconds);
       setElapsedSeconds(0);

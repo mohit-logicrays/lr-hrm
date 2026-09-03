@@ -386,6 +386,7 @@ export interface TimeLog {
   endTime?: string | null;
   hours: number;
   durationMin: number;
+  durationSec?: number;
   isBillable: boolean;
   isOvertime: boolean;
   description?: string | null;
@@ -412,7 +413,8 @@ export interface CreateTimeLogPayload {
   date: string;
   startTime?: string | null;
   endTime?: string | null;
-  hours: number;
+  hours?: number;
+  durationSec?: number;
   isBillable?: boolean;
   isOvertime?: boolean;
   description?: string | null;

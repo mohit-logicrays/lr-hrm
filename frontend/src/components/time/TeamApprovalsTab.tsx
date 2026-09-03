@@ -27,7 +27,7 @@ import {
   Clock,
   UserCheck,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatDuration } from "@/lib/utils";
 
 function getStatusBadge(status: string) {
   switch (status) {
@@ -267,7 +267,10 @@ export function TeamApprovalsTab() {
                       </td>
 
                       <td className="py-3 px-6 font-mono font-bold text-text-primary">
-                        {log.hours.toFixed(1)}h
+                        <div>{formatDuration(log.hours, log.durationSec)}</div>
+                        <span className="text-[10px] text-text-tertiary font-mono font-normal">
+                          ({log.hours.toFixed(2)}h)
+                        </span>
                         {log.isOvertime && (
                           <span className="text-[9px] text-info block font-mono">
                             Overtime

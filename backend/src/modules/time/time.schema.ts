@@ -6,11 +6,14 @@ export const createTimeLogSchema = z.object({
   date: z.string().min(1, "Date is required"),
   startTime: z.string().optional().nullable(),
   endTime: z.string().optional().nullable(),
-  hours: z.number().min(0.1, "Hours must be at least 0.1").max(24, "Hours cannot exceed 24"),
+  hours: z.number().positive("Hours must be greater than 0").max(24, "Hours cannot exceed 24").optional(),
+  durationSec: z.number().int().nonnegative().optional(),
   isBillable: z.boolean().default(true),
   isOvertime: z.boolean().default(false),
   description: z.string().optional().nullable(),
   status: z.enum(["DRAFT", "SUBMITTED"]).optional().default("DRAFT"),
+}).refine((data) => (data.hours !== undefined && data.hours > 0) || (data.durationSec !== undefined && data.durationSec > 0), {
+  message: "Either hours or durationSec must be provided and greater than 0",
 });
 
 export const updateTimeLogSchema = z.object({
@@ -19,7 +22,8 @@ export const updateTimeLogSchema = z.object({
   date: z.string().optional(),
   startTime: z.string().optional().nullable(),
   endTime: z.string().optional().nullable(),
-  hours: z.number().min(0.1).max(24).optional(),
+  hours: z.number().positive("Hours must be greater than 0").max(24).optional(),
+  durationSec: z.number().int().nonnegative().optional(),
   isBillable: z.boolean().optional(),
   isOvertime: z.boolean().optional(),
   description: z.string().optional().nullable(),

@@ -16,6 +16,7 @@ const timeLogSelect = {
   endTime: true,
   hours: true,
   durationMin: true,
+  durationSec: true,
   isBillable: true,
   isOvertime: true,
   description: true,
@@ -161,8 +162,20 @@ export class TimeService {
 
     const logDate = new Date(data.date);
 
+    // Calculate durationSec, durationMin and hours accurately
+    let durationSec = data.durationSec ?? 0;
+    let hours = data.hours ?? 0;
+
+    if (durationSec > 0 && hours === 0) {
+      hours = Number((durationSec / 3600).toFixed(4));
+    } else if (hours > 0 && durationSec === 0) {
+      durationSec = Math.round(hours * 3600);
+    }
+
+    const durationMin = Math.round(durationSec / 60);
+
     // Business rule: Overtime auto-calculated if hours > 8
-    const isOvertime = data.isOvertime || data.hours > 8;
+    const isOvertime = data.isOvertime || hours > 8;
 
     return prisma.timeLog.create({
       data: {
@@ -172,8 +185,9 @@ export class TimeService {
         date: logDate,
         startTime: data.startTime ? new Date(data.startTime) : null,
         endTime: data.endTime ? new Date(data.endTime) : null,
-        hours: data.hours,
-        durationMin: Math.round(data.hours * 60),
+        hours,
+        durationMin,
+        durationSec,
         isBillable: data.isBillable,
         isOvertime,
         description: data.description ?? null,
@@ -199,7 +213,16 @@ export class TimeService {
       throw new AppError(400, "Only Draft or Rejected timesheets can be edited");
     }
 
-    const hours = data.hours ?? existing.hours;
+    let durationSec = data.durationSec ?? existing.durationSec;
+    let hours = data.hours ?? existing.hours;
+
+    if (data.durationSec !== undefined && data.hours === undefined) {
+      hours = Number((data.durationSec / 3600).toFixed(4));
+    } else if (data.hours !== undefined && data.durationSec === undefined) {
+      durationSec = Math.round(data.hours * 3600);
+    }
+
+    const durationMin = Math.round(durationSec / 60);
     const isOvertime = data.isOvertime ?? (hours > 8 || existing.isOvertime);
 
     return prisma.timeLog.update({
@@ -211,7 +234,8 @@ export class TimeService {
         startTime: data.startTime ? new Date(data.startTime) : existing.startTime,
         endTime: data.endTime ? new Date(data.endTime) : existing.endTime,
         hours,
-        durationMin: Math.round(hours * 60),
+        durationMin,
+        durationSec,
         isBillable: data.isBillable ?? existing.isBillable,
         isOvertime,
         description: data.description ?? existing.description,

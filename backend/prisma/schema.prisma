@@ -46,6 +46,7 @@ model TimeLog {
   endTime         DateTime?
   hours           Float         @default(0)
   durationMin     Int           @default(0)
+  durationSec     Int           @default(0)
   isBillable      Boolean       @default(true)
   isOvertime      Boolean       @default(false)
   description     String?
