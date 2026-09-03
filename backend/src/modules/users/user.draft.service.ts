@@ -71,9 +71,10 @@ export class UserDraftService {
   /**
    * Delete draft on completion or cancellation
    */
-  async deleteDraft(draftId: string) {
+  async deleteDraft(draftId?: string | null) {
+    if (!draftId) return;
     try {
-      await prisma.userDraft.delete({ where: { id: draftId } });
+      await prisma.userDraft.deleteMany({ where: { id: draftId } });
     } catch {
       // Ignore if draft already deleted
     }

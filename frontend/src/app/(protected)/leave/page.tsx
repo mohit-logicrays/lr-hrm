@@ -70,7 +70,7 @@ export default function LeaveManagementPage() {
     ["SUPERADMIN", "HR_ADMIN", "ADMIN", "HR"].includes(roleName.toUpperCase()) ||
     Boolean(perms.type_manage || perms.balance_manage || user?.isSpecialRole);
 
-  const [activeTab, setActiveTab] = useState<LeaveTab>("team_requests");
+  const [activeTab, setActiveTab] = useState<LeaveTab>(() => (isHr || canApprove ? "team_requests" : "my_leaves"));
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
   const [myBalances, setMyBalances] = useState<LeaveBalance[]>([]);
@@ -434,17 +434,6 @@ export default function LeaveManagementPage() {
             <div className="flex items-center justify-between border-b border-border-base px-6 pt-3 bg-surface-subtle/30">
               <div className="flex space-x-6">
                 <button
-                  onClick={() => setActiveTab("team_requests")}
-                  className={cn(
-                    "py-3 font-semibold text-xs transition-colors border-b-2 cursor-pointer",
-                    activeTab === "team_requests"
-                      ? "border-brand text-brand font-bold"
-                      : "border-transparent text-text-tertiary hover:text-text-primary"
-                  )}
-                >
-                  Team Requests
-                </button>
-                <button
                   onClick={() => setActiveTab("my_leaves")}
                   className={cn(
                     "py-3 font-semibold text-xs transition-colors border-b-2 cursor-pointer",
@@ -455,6 +444,19 @@ export default function LeaveManagementPage() {
                 >
                   My Leaves
                 </button>
+                {(isHr || canApprove) && (
+                  <button
+                    onClick={() => setActiveTab("team_requests")}
+                    className={cn(
+                      "py-3 font-semibold text-xs transition-colors border-b-2 cursor-pointer",
+                      activeTab === "team_requests"
+                        ? "border-brand text-brand font-bold"
+                        : "border-transparent text-text-tertiary hover:text-text-primary"
+                    )}
+                  >
+                    {isHr ? "All Leave Requests" : "Team Requests"}
+                  </button>
+                )}
                 <button
                   onClick={() => setActiveTab("calendar")}
                   className={cn(
