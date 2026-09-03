@@ -1,11 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { motion, type Variants } from "framer-motion";
 import { toast } from "sonner";
 import { api, type Project, type Task } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   Play,
   Square,
@@ -13,6 +21,9 @@ import {
   Timer,
   Clock,
   RotateCcw,
+  AlertCircle,
+  Coffee,
+  Info,
 } from "lucide-react";
 import { cn, formatSecondsToHMS } from "@/lib/utils";
 
@@ -41,27 +52,51 @@ export function SmartTimeTrackerWidget({
   const [description, setDescription] = useState<string>("");
   const [saving, setSaving] = useState(false);
 
-  // Load persisted timer directly from database on mount
+  // Long-Session Review / Break Adjustment Dialog State
+  const [showLongSessionModal, setShowLongSessionModal] = useState(false);
+  const [suggestedBreakMinutes, setSuggestedBreakMinutes] = useState(30);
+  const [customTrackMinutes, setCustomTrackMinutes] = useState<number>(120);
+
+  // Ref to track last sync timestamp to avoid flooding backend
+  const lastSyncTimeRef = useRef<number>(Date.now());
+
+  // Load persisted timer directly from database on mount & on page focus
+  const loadDbTimer = useCallback(async () => {
+    try {
+      const res = await api.getActiveTimer();
+      const dbTimer = res.data;
+      if (dbTimer) {
+        setMode((dbTimer.mode as any) || "countdown");
+        setSelectedProjectId(dbTimer.projectId || "");
+        setSelectedTaskId(dbTimer.taskId || "");
+        setDescription(dbTimer.description || "");
+        setElapsedSeconds(dbTimer.elapsedSeconds || 0);
+        setRemainingSeconds(dbTimer.remainingSeconds ?? defaultDurationSeconds);
+        setIsRunning(dbTimer.isRunning);
+      }
+    } catch {
+      // Fallback gracefully
+    }
+  }, [defaultDurationSeconds]);
+
   useEffect(() => {
-    async function loadDbTimer() {
-      try {
-        const res = await api.getActiveTimer();
-        const dbTimer = res.data;
-        if (dbTimer) {
-          setMode(dbTimer.mode as any || "countdown");
-          setSelectedProjectId(dbTimer.projectId || "");
-          setSelectedTaskId(dbTimer.taskId || "");
-          setDescription(dbTimer.description || "");
-          setElapsedSeconds(dbTimer.elapsedSeconds || 0);
-          setRemainingSeconds(dbTimer.remainingSeconds ?? defaultDurationSeconds);
-          setIsRunning(dbTimer.isRunning);
-        }
-      } catch {
-        // Fallback gracefully
+    loadDbTimer();
+  }, [loadDbTimer]);
+
+  // Window Focus / Visibility Change Listener to auto-refresh state from DB when returning to tab/page
+  useEffect(() => {
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        loadDbTimer();
       }
     }
-    loadDbTimer();
-  }, [defaultDurationSeconds]);
+    window.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", loadDbTimer);
+    return () => {
+      window.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", loadDbTimer);
+    };
+  }, [loadDbTimer]);
 
   useEffect(() => {
     async function loadProjects() {
@@ -172,21 +207,34 @@ export function SmartTimeTrackerWidget({
     toast.info("Timer reset to 2 hours");
   }
 
-  async function handleStopAndSave() {
+  function handleStopTrigger() {
     if (elapsedSeconds <= 0) {
       toast.warning("Please start the timer first");
       return;
     }
 
+    // If session is unusually long (>= 3 hours / 10,800 seconds), open deduction modal
+    if (elapsedSeconds >= 10800) {
+      const totalMinutes = Math.round(elapsedSeconds / 60);
+      setSuggestedBreakMinutes(30);
+      setCustomTrackMinutes(Math.max(1, totalMinutes - 30));
+      setShowLongSessionModal(true);
+      return;
+    }
+
+    executeSaveTimeLog(elapsedSeconds);
+  }
+
+  async function executeSaveTimeLog(durationSec: number) {
     setSaving(true);
     const today = new Date().toISOString().split("T")[0];
-    const durationSec = Math.max(1, elapsedSeconds);
-    const calculatedHours = Number((durationSec / 3600).toFixed(4));
+    const finalSec = Math.max(1, durationSec);
+    const calculatedHours = Number((finalSec / 3600).toFixed(4));
 
     try {
       await api.createTimeLog({
         date: today,
-        durationSec,
+        durationSec: finalSec,
         hours: calculatedHours,
         projectId: selectedProjectId || undefined,
         taskId: selectedTaskId || undefined,
@@ -194,11 +242,12 @@ export function SmartTimeTrackerWidget({
         isBillable: true,
       });
 
-      toast.success(`Logged ${formatSecondsToHMS(durationSec)} successfully`);
+      toast.success(`Logged ${formatSecondsToHMS(finalSec)} successfully`);
       setIsRunning(false);
       setRemainingSeconds(defaultDurationSeconds);
       setElapsedSeconds(0);
       setDescription("");
+      setShowLongSessionModal(false);
       try {
         await api.clearActiveTimer();
       } catch {}
@@ -211,9 +260,12 @@ export function SmartTimeTrackerWidget({
   }
 
   const activeDisplayTime = mode === "countdown" ? remainingSeconds : elapsedSeconds;
-  const progressPercent = mode === "countdown"
-    ? Math.min(100, Math.max(0, ((defaultDurationSeconds - remainingSeconds) / defaultDurationSeconds) * 100))
-    : Math.min(100, (elapsedSeconds / 7200) * 100);
+  const progressPercent =
+    mode === "countdown"
+      ? Math.min(100, Math.max(0, ((defaultDurationSeconds - remainingSeconds) / defaultDurationSeconds) * 100))
+      : Math.min(100, (elapsedSeconds / 7200) * 100);
+
+  const isLongSession = elapsedSeconds >= 10800;
 
   return (
     <motion.div variants={variants}>
@@ -237,9 +289,14 @@ export function SmartTimeTrackerWidget({
                 <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-brand/10 text-brand font-mono">
                   {mode === "countdown" ? "2h Focus Countdown" : "Stopwatch"}
                 </span>
+                {isRunning && (
+                  <span className="inline-flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-success/15 text-success font-mono animate-pulse">
+                    <span className="w-1.5 h-1.5 rounded-full bg-success inline-block" /> Active
+                  </span>
+                )}
               </div>
               <p className="text-xs text-text-tertiary mt-0.5">
-                Select project & task, add description, and start timer with 2-hour focus target.
+                Select project & task, add description, and start timer. Timer stays synced across dashboard and timesheets.
               </p>
             </div>
           </div>
@@ -254,8 +311,16 @@ export function SmartTimeTrackerWidget({
             <div className="flex flex-col gap-1">
               <button
                 type="button"
-                onClick={() => setMode(mode === "countdown" ? "stopwatch" : "countdown")}
-                className="text-[10px] text-text-tertiary hover:text-text-primary font-semibold underline cursor-pointer"
+                disabled={isRunning}
+                onClick={() => {
+                  const nextMode = mode === "countdown" ? "stopwatch" : "countdown";
+                  setMode(nextMode);
+                  syncToDatabase(isRunning);
+                }}
+                className={cn(
+                  "text-[10px] font-semibold underline cursor-pointer",
+                  isRunning ? "opacity-50 cursor-not-allowed text-text-tertiary" : "text-text-tertiary hover:text-text-primary"
+                )}
               >
                 Switch to {mode === "countdown" ? "Stopwatch" : "Countdown"}
               </button>
@@ -268,12 +333,28 @@ export function SmartTimeTrackerWidget({
           </div>
         </div>
 
+        {/* Long running warning alert */}
+        {isLongSession && (
+          <div className="mt-4 p-3 bg-warning/10 border border-warning/30 rounded-xl flex items-start gap-2.5 text-xs text-warning-foreground">
+            <AlertCircle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <p className="font-semibold">Long timer session detected (3+ hours)</p>
+              <p className="text-[11px] text-text-tertiary">
+                Don&apos;t worry if you forgot to stop the timer! When you click <strong>Stop & Save</strong>, you can deduct break times or adjust exact working hours before saving.
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-5 pt-5 border-t border-border-base">
           <div className="flex flex-col gap-1">
             <label className="text-[11px] font-semibold text-text-secondary">Project *</label>
             <select
               value={selectedProjectId}
-              onChange={(e) => setSelectedProjectId(e.target.value)}
+              onChange={(e) => {
+                setSelectedProjectId(e.target.value);
+                syncToDatabase(isRunning);
+              }}
               className="h-9 w-full rounded-lg border border-border-base bg-surface px-3 text-xs font-medium text-text-primary focus:border-brand focus:outline-none cursor-pointer"
             >
               <option value="">Select Project</option>
@@ -289,7 +370,10 @@ export function SmartTimeTrackerWidget({
             <label className="text-[11px] font-semibold text-text-secondary">Task (Optional)</label>
             <select
               value={selectedTaskId}
-              onChange={(e) => setSelectedTaskId(e.target.value)}
+              onChange={(e) => {
+                setSelectedTaskId(e.target.value);
+                syncToDatabase(isRunning);
+              }}
               disabled={!selectedProjectId || tasks.length === 0}
               className="h-9 w-full rounded-lg border border-border-base bg-surface px-3 text-xs font-medium text-text-primary focus:border-brand focus:outline-none disabled:opacity-50 cursor-pointer"
             >
@@ -308,16 +392,20 @@ export function SmartTimeTrackerWidget({
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              onBlur={() => syncToDatabase(isRunning)}
               placeholder="What are you working on?"
               className="h-9 w-full rounded-lg border border-border-base bg-surface px-3 text-xs text-text-primary focus:border-brand focus:outline-none"
             />
           </div>
         </div>
 
+        {/* Note to user about breaks + Actions */}
         <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pt-3 border-t border-border-base/60">
-          <div className="flex items-center gap-2 text-xs text-text-tertiary">
-            <Clock className="h-3.5 w-3.5 text-brand" />
-            <span>Default target: <strong className="text-text-primary">2 Hours</strong> per focus block</span>
+          <div className="flex items-center gap-2 text-[11px] text-text-tertiary">
+            <Info className="h-3.5 w-3.5 text-brand shrink-0" />
+            <span>
+              <strong>Review & break reminder:</strong> Extended uninterrupted tracking (&ge;3h) will prompt you to deduct break intervals when stopping.
+            </span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -354,7 +442,7 @@ export function SmartTimeTrackerWidget({
               size="sm"
               variant="outline"
               disabled={saving || elapsedSeconds === 0}
-              onClick={handleStopAndSave}
+              onClick={handleStopTrigger}
               className="text-xs h-8 px-4 gap-1.5 font-semibold border-brand text-brand hover:bg-brand/10 cursor-pointer"
             >
               <Square className="h-3 w-3 fill-current" /> {saving ? "Saving..." : "Stop & Save"}
@@ -362,6 +450,102 @@ export function SmartTimeTrackerWidget({
           </div>
         </div>
       </Card>
+
+      {/* Long-Session Break Adjustment Modal */}
+      <Dialog open={showLongSessionModal} onOpenChange={setShowLongSessionModal}>
+        <DialogContent className="sm:max-w-md bg-surface border-border-base">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-text-primary text-base">
+              <Coffee className="h-5 w-5 text-warning" />
+              Adjust Long Session & Deduct Breaks
+            </DialogTitle>
+            <DialogDescription className="text-xs text-text-tertiary">
+              This timer ran for <strong>{formatSecondsToHMS(elapsedSeconds)}</strong>. If you forgot to stop the timer or took lunch/breaks, adjust the logged duration below:
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2 text-xs">
+            <div className="p-3 bg-surface-subtle border border-border-base rounded-xl space-y-2">
+              <div className="flex justify-between items-center text-text-secondary font-medium">
+                <span>Total Elapsed Time:</span>
+                <span className="font-mono font-bold text-text-primary">{formatSecondsToHMS(elapsedSeconds)}</span>
+              </div>
+              <div className="flex justify-between items-center text-text-secondary font-medium">
+                <span>Total Raw Hours:</span>
+                <span className="font-mono font-bold text-text-primary">{(elapsedSeconds / 3600).toFixed(2)}h</span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="font-semibold text-text-primary block">Quick Break Deduction:</label>
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { label: "No Break", breakMin: 0 },
+                  { label: "15 min", breakMin: 15 },
+                  { label: "30 min", breakMin: 30 },
+                  { label: "1 hour", breakMin: 60 },
+                ].map((item) => (
+                  <button
+                    key={item.breakMin}
+                    type="button"
+                    onClick={() => {
+                      setSuggestedBreakMinutes(item.breakMin);
+                      const totalMin = Math.round(elapsedSeconds / 60);
+                      setCustomTrackMinutes(Math.max(1, totalMin - item.breakMin));
+                    }}
+                    className={cn(
+                      "py-2 px-2 rounded-lg border text-center font-medium transition-all cursor-pointer text-xs",
+                      suggestedBreakMinutes === item.breakMin
+                        ? "border-brand bg-brand/10 text-brand font-bold"
+                        : "border-border-base bg-surface hover:bg-surface-subtle text-text-secondary"
+                    )}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="font-semibold text-text-primary block">
+                Net Working Minutes to Log:
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  max={Math.round(elapsedSeconds / 60)}
+                  value={customTrackMinutes}
+                  onChange={(e) => setCustomTrackMinutes(Number(e.target.value))}
+                  className="h-9 w-full rounded-lg border border-border-base bg-surface px-3 text-xs text-text-primary font-mono focus:border-brand focus:outline-none"
+                />
+                <span className="font-mono text-xs font-bold text-brand shrink-0">
+                  ≈ {(customTrackMinutes / 60).toFixed(2)} hrs
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowLongSessionModal(false)}
+              className="text-xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => executeSaveTimeLog(customTrackMinutes * 60)}
+              disabled={saving}
+              className="bg-brand text-white hover:bg-brand-hover text-xs font-semibold"
+            >
+              {saving ? "Saving..." : `Confirm & Log ${(customTrackMinutes / 60).toFixed(2)}h`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   );
 }

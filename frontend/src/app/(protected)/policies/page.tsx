@@ -28,6 +28,7 @@ import {
   Trash2,
   Eye,
   Pencil,
+  Users,
 } from "lucide-react";
 
 const pageVariants = {
@@ -48,6 +49,25 @@ export default function PoliciesPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<CompanyPolicy | null>(null);
   const [inspectPolicy, setInspectPolicy] = useState<CompanyPolicy | null>(null);
+  const [acknowledgmentStats, setAcknowledgmentStats] = useState<{
+    totalActiveUsers: number;
+    totalAcknowledged: number;
+    acknowledgments: Array<{
+      id: string;
+      userId: string;
+      acknowledgedAt: string;
+      user: {
+        id: string;
+        firstName: string;
+        lastName: string;
+        email: string;
+        avatarUrl?: string | null;
+        department?: { id: string; name: string } | null;
+        role?: { name: string; displayName: string } | null;
+      };
+    }>;
+  } | null>(null);
+  const [loadingStats, setLoadingStats] = useState(false);
   const [acknowledging, setAcknowledging] = useState(false);
 
   const loadPolicies = async () => {
@@ -65,6 +85,30 @@ export default function PoliciesPage() {
     }
   };
 
+  const handleOpenInspect = async (policy: CompanyPolicy) => {
+    setInspectPolicy(policy);
+    setAcknowledgmentStats(null);
+    try {
+      // Fetch fresh policy details with isAcknowledged for current user
+      const fullRes = await api.getPolicy(policy.id);
+      if (fullRes.data) {
+        setInspectPolicy(fullRes.data);
+      }
+      // If HR/Admin, also fetch list of employees who acknowledged
+      if (isSuperAdminOrHR) {
+        setLoadingStats(true);
+        const statsRes = await api.getPolicyAcknowledgmentStats(policy.id);
+        if (statsRes.data) {
+          setAcknowledgmentStats(statsRes.data);
+        }
+      }
+    } catch {
+      // Silent error
+    } finally {
+      setLoadingStats(false);
+    }
+  };
+
   useEffect(() => {
     loadPolicies();
   }, [search, selectedCategory]);
@@ -77,6 +121,10 @@ export default function PoliciesPage() {
       loadPolicies();
       if (inspectPolicy && inspectPolicy.id === policyId) {
         setInspectPolicy({ ...inspectPolicy, isAcknowledged: true });
+        if (isSuperAdminOrHR) {
+          const statsRes = await api.getPolicyAcknowledgmentStats(policyId);
+          if (statsRes.data) setAcknowledgmentStats(statsRes.data);
+        }
       }
     } catch (err: any) {
       toast.error(err.message || "Failed to acknowledge policy");
@@ -179,6 +227,7 @@ export default function PoliciesPage() {
                   <th className="py-3.5 px-6">Policy Name</th>
                   <th className="py-3.5 px-6">Category</th>
                   <th className="py-3.5 px-6">Version</th>
+                  <th className="py-3.5 px-6">Status / Acknowledgment</th>
                   <th className="py-3.5 px-6">Last Updated</th>
                   <th className="py-3.5 px-6 text-right">Actions</th>
                 </tr>
@@ -209,6 +258,22 @@ export default function PoliciesPage() {
                       {p.version}
                     </td>
 
+                    <td className="py-3.5 px-6">
+                      {p.isMandatory ? (
+                        p.isAcknowledged ? (
+                          <Badge className="bg-success/15 text-success border-success/30 font-bold text-[10px] px-2 py-0.5">
+                            <CheckCircle2 className="h-3 w-3 mr-1 inline" /> Acknowledged
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="bg-warning/15 text-warning border-warning/30 font-bold text-[10px] px-2 py-0.5">
+                            Pending Your Review
+                          </Badge>
+                        )
+                      ) : (
+                        <span className="text-[11px] text-text-tertiary font-mono">Optional</span>
+                      )}
+                    </td>
+
                     <td className="py-3.5 px-6 font-mono text-text-tertiary">
                       {new Date(p.updatedAt).toLocaleDateString(undefined, {
                         month: "short",
@@ -221,8 +286,8 @@ export default function PoliciesPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => setInspectPolicy(p)}
-                        className="text-xs h-7 px-2.5 rounded-lg border-border-base hover:bg-surface-subtle"
+                        onClick={() => handleOpenInspect(p)}
+                        className="text-xs h-7 px-2.5 rounded-lg border-border-base hover:bg-surface-subtle cursor-pointer"
                       >
                         <Eye className="h-3.5 w-3.5 mr-1" /> View
                       </Button>
@@ -233,7 +298,7 @@ export default function PoliciesPage() {
                           size="icon"
                           title="Edit Policy"
                           onClick={() => setEditingPolicy(p)}
-                          className="h-7 w-7 text-text-tertiary hover:text-brand hover:bg-brand/10"
+                          className="h-7 w-7 text-text-tertiary hover:text-brand hover:bg-brand/10 cursor-pointer"
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
@@ -245,7 +310,7 @@ export default function PoliciesPage() {
                           size="icon"
                           title="Delete Policy"
                           onClick={() => handleDelete(p.id)}
-                          className="h-7 w-7 text-text-tertiary hover:text-error hover:bg-error/10"
+                          className="h-7 w-7 text-text-tertiary hover:text-error hover:bg-error/10 cursor-pointer"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
@@ -307,30 +372,90 @@ export default function PoliciesPage() {
 
               {/* Acknowledgment Action */}
               {inspectPolicy.isMandatory && (
-                <div className="p-4 rounded-xl border border-brand/30 bg-brand/5 flex items-center justify-between">
+                <div className="p-4 rounded-xl border border-brand/30 bg-brand/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <h4 className="font-bold text-xs text-text-primary flex items-center gap-1.5">
                       <ShieldCheck className="h-4 w-4 text-brand" /> Policy Acknowledgment
                     </h4>
-                    <p className="text-[11px] text-text-tertiary">
+                    <p className="text-[11px] text-text-tertiary mt-0.5">
                       {inspectPolicy.isAcknowledged
-                        ? "You have acknowledged reading and understanding this policy."
+                        ? "You have acknowledged reading and agreeing to this policy."
                         : "Mandatory compliance: Confirm you have read and agree to this policy."}
                     </p>
                   </div>
 
                   {inspectPolicy.isAcknowledged ? (
-                    <Badge className="bg-success/20 text-success font-bold text-xs px-3 py-1">
+                    <Badge className="bg-success/20 text-success font-bold text-xs px-3 py-1 shrink-0">
                       <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Acknowledged
                     </Badge>
                   ) : (
                     <Button
                       onClick={() => handleAcknowledge(inspectPolicy.id)}
                       disabled={acknowledging}
-                      className="bg-brand text-white font-bold text-xs"
+                      className="bg-brand text-white font-bold text-xs shrink-0 cursor-pointer shadow-2xs"
                     >
                       {acknowledging ? "Acknowledging..." : "I Acknowledge"}
                     </Button>
+                  )}
+                </div>
+              )}
+
+              {/* HR / Admin Compliance Audit View: Who Acknowledged */}
+              {isSuperAdminOrHR && (
+                <div className="pt-4 border-t border-border-base space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-heading text-xs font-bold text-text-primary uppercase tracking-wider flex items-center gap-1.5">
+                      <Users className="h-4 w-4 text-brand" />
+                      Employee Compliance Status
+                    </h4>
+                    {acknowledgmentStats && (
+                      <span className="font-mono text-xs text-brand font-bold">
+                        {acknowledgmentStats.totalAcknowledged} / {acknowledgmentStats.totalActiveUsers} Signed
+                      </span>
+                    )}
+                  </div>
+
+                  {loadingStats ? (
+                    <div className="py-6 text-center text-xs text-text-tertiary">Loading acknowledgment audit...</div>
+                  ) : acknowledgmentStats && acknowledgmentStats.acknowledgments.length > 0 ? (
+                    <div className="space-y-2 max-h-60 overflow-y-auto border border-border-base rounded-xl p-2 bg-surface-subtle/20">
+                      {acknowledgmentStats.acknowledgments.map((ack) => (
+                        <div
+                          key={ack.id}
+                          className="p-2.5 rounded-lg bg-surface border border-border-base/60 flex items-center justify-between text-xs"
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-7 h-7 rounded-full bg-brand/10 text-brand font-bold flex items-center justify-center text-[10px]">
+                              {ack.user.firstName?.[0] || "U"}
+                            </div>
+                            <div>
+                              <p className="font-semibold text-text-primary">
+                                {ack.user.firstName} {ack.user.lastName}
+                              </p>
+                              <p className="text-[10px] text-text-tertiary font-mono">{ack.user.email}</p>
+                            </div>
+                          </div>
+
+                          <div className="text-right">
+                            <span className="text-[10px] text-success font-semibold flex items-center gap-1">
+                              <CheckCircle2 className="h-3 w-3" /> Signed
+                            </span>
+                            <span className="text-[10px] text-text-tertiary font-mono block">
+                              {new Date(ack.acknowledgedAt).toLocaleDateString(undefined, {
+                                month: "short",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-text-tertiary italic p-3 bg-surface-subtle/30 rounded-lg">
+                      No employee acknowledgments recorded for this policy yet.
+                    </p>
                   )}
                 </div>
               )}

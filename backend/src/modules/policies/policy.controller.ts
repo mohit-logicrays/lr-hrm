@@ -11,13 +11,18 @@ import { AppError } from "../../utils/AppError";
 
 export const listPolicies = asyncHandler(async (req: Request, res: Response) => {
   const query = policyQuerySchema.parse(req.query);
-  const result = await policyService.list(query);
+  const result = await policyService.list({ ...query, userId: req.user?.id });
   ApiResponse.success(res, 200, "Policies fetched", result.data, result.pagination);
 });
 
 export const getPolicy = asyncHandler(async (req: Request, res: Response) => {
   const policy = await policyService.getById(req.params.id, req.user?.id);
   ApiResponse.success(res, 200, "Policy fetched", policy);
+});
+
+export const getPolicyAcknowledgments = asyncHandler(async (req: Request, res: Response) => {
+  const stats = await policyService.getAcknowledgmentStats(req.params.id);
+  ApiResponse.success(res, 200, "Policy acknowledgments fetched", stats);
 });
 
 export const createPolicy = asyncHandler(async (req: Request, res: Response) => {

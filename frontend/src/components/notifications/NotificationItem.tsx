@@ -33,9 +33,17 @@ interface NotificationItemProps {
   item: NotificationItemType;
   onMarkRead: (id: string) => void;
   onDelete: (id: string) => void;
+  isSelected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }
 
-export function NotificationItemRow({ item, onMarkRead, onDelete }: NotificationItemProps) {
+export function NotificationItemRow({
+  item,
+  onMarkRead,
+  onDelete,
+  isSelected = false,
+  onToggleSelect,
+}: NotificationItemProps) {
   const router = useRouter();
 
   function getIcon(type: string) {
@@ -74,13 +82,32 @@ export function NotificationItemRow({ item, onMarkRead, onDelete }: Notification
       exit={{ opacity: 0, scale: 0.95 }}
       className={cn(
         "p-3 rounded-xl transition-all relative flex items-start justify-between gap-3 border group cursor-pointer",
-        item.isRead
+        isSelected
+          ? "bg-brand/10 border-brand shadow-xs"
+          : item.isRead
           ? "bg-surface/50 border-transparent hover:bg-surface-subtle/70"
           : "bg-brand/5 border-brand/20 hover:bg-brand/10 shadow-2xs"
       )}
       onClick={handleClick}
     >
       <div className="flex items-start gap-3 min-w-0">
+        {onToggleSelect && (
+          <div
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleSelect(item.id);
+            }}
+            className="mt-1 flex items-center justify-center cursor-pointer"
+          >
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={() => {}}
+              className="h-4 w-4 rounded border-border-base text-brand focus:ring-brand cursor-pointer accent-brand"
+            />
+          </div>
+        )}
+
         <div className="p-2 rounded-lg bg-surface border border-border-base shrink-0 shadow-2xs mt-0.5">
           {getIcon(item.type)}
         </div>

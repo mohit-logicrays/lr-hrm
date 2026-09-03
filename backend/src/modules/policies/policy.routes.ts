@@ -9,6 +9,7 @@ router.use(authenticate);
 
 router.get("/", policyController.listPolicies);
 router.get("/:id", policyController.getPolicy);
+router.get("/:id/acknowledgments", policyController.getPolicyAcknowledgments);
 router.post("/:id/acknowledge", policyController.acknowledgePolicy);
 
 // HR / Superadmin / Admin Only Endpoints

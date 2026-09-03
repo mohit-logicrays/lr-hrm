@@ -44,8 +44,21 @@ export function NotificationBellDropdown() {
 
   useEffect(() => {
     loadNotifications();
-    const interval = setInterval(loadNotifications, 30000); // 30s auto-refresh
-    return () => clearInterval(interval);
+    const interval = setInterval(loadNotifications, 15000); // 15s proactive polling
+
+    const handleFocus = () => {
+      if (document.visibilityState === "visible") {
+        loadNotifications();
+      }
+    };
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleFocus);
+    };
   }, [filter]);
 
   // Request browser push permission if supported

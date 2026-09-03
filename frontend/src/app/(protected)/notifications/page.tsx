@@ -31,13 +31,17 @@ export default function NotificationsCenterPage() {
   const [typeFilter, setTypeFilter] = useState<string>("");
   const [loading, setLoading] = useState(true);
 
+  // Bulk Selection States
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isBulkOperating, setIsBulkOperating] = useState(false);
+
   async function loadData() {
     setLoading(true);
     try {
       const res = await api.listNotifications(page, 20, filter === "unread");
       let list = res.data || [];
       if (typeFilter) {
-        list = list.filter((n) => n.type === typeFilter);
+        list = list.filter((n) => n.type.toLowerCase() === typeFilter.toLowerCase());
       }
       setItems(list);
       setUnreadCount(res.unreadCount || 0);
@@ -52,7 +56,41 @@ export default function NotificationsCenterPage() {
 
   useEffect(() => {
     loadData();
+    setSelectedIds(new Set());
   }, [page, filter, typeFilter]);
+
+  // Proactive periodic polling (every 15s) + focus sync
+  useEffect(() => {
+    const interval = setInterval(loadData, 15000);
+    const onFocus = () => {
+      if (document.visibilityState === "visible") loadData();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, [page, filter, typeFilter]);
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllPage = () => {
+    if (selectedIds.size === items.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(items.map((i) => i.id)));
+    }
+  };
 
   async function handleMarkRead(id: string) {
     try {
@@ -66,14 +104,39 @@ export default function NotificationsCenterPage() {
     }
   }
 
+  // Bulk Read Selected Items
+  async function handleBulkReadSelected() {
+    if (selectedIds.size === 0) return;
+    try {
+      setIsBulkOperating(true);
+      const idsToMark = Array.from(selectedIds);
+      await Promise.all(idsToMark.map((id) => api.markNotificationRead(id)));
+      setItems((prev) =>
+        prev.map((n) => (selectedIds.has(n.id) ? { ...n, isRead: true } : n))
+      );
+      setSelectedIds(new Set());
+      setUnreadCount((prev) => Math.max(0, prev - idsToMark.length));
+      toast.success(`Marked ${idsToMark.length} notifications as read`);
+    } catch {
+      toast.error("Failed to mark selected notifications as read");
+    } finally {
+      setIsBulkOperating(false);
+    }
+  }
+
+  // Wildcard Global Mark All Read (All Pages across Entire Database)
   async function handleMarkAllRead() {
     try {
+      setIsBulkOperating(true);
       await api.markAllNotificationsRead();
       setItems((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      setSelectedIds(new Set());
       setUnreadCount(0);
-      toast.success("All notifications marked as read");
+      toast.success("All notifications across entire account marked as read");
     } catch {
       toast.error("Failed to mark all as read");
+    } finally {
+      setIsBulkOperating(false);
     }
   }
 
@@ -81,6 +144,11 @@ export default function NotificationsCenterPage() {
     try {
       await api.deleteNotification(id);
       setItems((prev) => prev.filter((n) => n.id !== id));
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
       toast.success("Notification removed");
     } catch {
       toast.error("Failed to delete notification");
@@ -92,12 +160,15 @@ export default function NotificationsCenterPage() {
     try {
       await api.clearAllNotifications();
       setItems([]);
+      setSelectedIds(new Set());
       setUnreadCount(0);
       toast.success("All notifications cleared");
     } catch {
       toast.error("Failed to clear notifications");
     }
   }
+
+  const isAllPageSelected = items.length > 0 && selectedIds.size === items.length;
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -114,19 +185,21 @@ export default function NotificationsCenterPage() {
             )}
           </h1>
           <p className="text-xs text-text-tertiary mt-1">
-            Stay updated with role-based alerts, approvals, project milestones, and reminders.
+            Real-time alerts, announcements, policies, approvals, and reminders.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Wildcard Bulk Read */}
           {unreadCount > 0 && (
             <Button
               variant="outline"
               size="sm"
               onClick={handleMarkAllRead}
-              className="text-xs h-8 gap-1.5 font-semibold text-brand border-brand/30 hover:bg-brand/10 cursor-pointer"
+              disabled={isBulkOperating}
+              className="text-xs h-8 gap-1.5 font-semibold text-brand border-brand/30 hover:bg-brand/10 cursor-pointer shadow-2xs"
             >
-              <CheckCheck className="h-3.5 w-3.5" /> Mark All Read
+              <CheckCheck className="h-3.5 w-3.5" /> Mark Everything Read (Wildcard)
             </Button>
           )}
 
@@ -154,9 +227,37 @@ export default function NotificationsCenterPage() {
         </div>
       </div>
 
-      {/* Filter Tabs & Module Dropdown */}
+      {/* Filter Tabs & Bulk Actions Bar */}
       <Card className="p-4 border border-border-base bg-surface shadow-2xs rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+          {/* Bulk Select Page Checkbox */}
+          {items.length > 0 && (
+            <div className="flex items-center gap-2 mr-2 pr-3 border-r border-border-base">
+              <input
+                type="checkbox"
+                id="select-all-checkbox"
+                checked={isAllPageSelected}
+                onChange={selectAllPage}
+                className="h-4 w-4 rounded border-border-base text-brand focus:ring-brand cursor-pointer accent-brand"
+              />
+              <label htmlFor="select-all-checkbox" className="text-xs font-semibold text-text-secondary cursor-pointer select-none">
+                Select Page ({selectedIds.size}/{items.length})
+              </label>
+            </div>
+          )}
+
+          {/* Selected Action Buttons */}
+          {selectedIds.size > 0 && (
+            <Button
+              size="sm"
+              onClick={handleBulkReadSelected}
+              disabled={isBulkOperating}
+              className="text-xs h-7 px-2.5 bg-brand text-white font-semibold cursor-pointer shadow-2xs gap-1"
+            >
+              <CheckCheck className="h-3 w-3" /> Mark Selected Read ({selectedIds.size})
+            </Button>
+          )}
+
           <button
             type="button"
             onClick={() => {
@@ -199,7 +300,10 @@ export default function NotificationsCenterPage() {
             className="h-8 rounded-lg border border-border-base bg-surface px-2.5 text-xs font-medium text-text-primary focus:border-brand focus:outline-none cursor-pointer"
           >
             <option value="">All Categories</option>
+            <option value="announcement">Announcements</option>
+            <option value="policy">Policies</option>
             <option value="leave">Leaves</option>
+            <option value="wfh">Work From Home (WFH)</option>
             <option value="timesheet">Timesheets</option>
             <option value="project">Projects</option>
             <option value="task">Tasks</option>
@@ -231,17 +335,19 @@ export default function NotificationsCenterPage() {
                   item={item}
                   onMarkRead={handleMarkRead}
                   onDelete={handleDelete}
+                  isSelected={selectedIds.has(item.id)}
+                  onToggleSelect={toggleSelect}
                 />
               ))}
             </AnimatePresence>
           </div>
         )}
 
-        {/* Pagination */}
+        {/* Pagination Controls */}
         {totalPages > 1 && (
           <div className="pt-4 border-t border-border-base flex items-center justify-between text-xs text-text-tertiary">
             <span>
-              Page {page} of {totalPages}
+              Page {page} of {totalPages} ({totalCount} total)
             </span>
             <div className="flex items-center gap-1.5">
               <Button
@@ -249,7 +355,7 @@ export default function NotificationsCenterPage() {
                 size="icon-sm"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1}
-                className="h-7 w-7"
+                className="h-7 w-7 cursor-pointer"
               >
                 <ChevronLeft className="h-3.5 w-3.5" />
               </Button>
@@ -258,7 +364,7 @@ export default function NotificationsCenterPage() {
                 size="icon-sm"
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
-                className="h-7 w-7"
+                className="h-7 w-7 cursor-pointer"
               >
                 <ChevronRight className="h-3.5 w-3.5" />
               </Button>

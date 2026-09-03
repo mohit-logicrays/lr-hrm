@@ -1499,6 +1499,27 @@ export const api = {
   acknowledgePolicy: (id: string) =>
     request<void>(`/api/v1/policies/${id}/acknowledge`, { method: "POST" }),
 
+  getPolicyAcknowledgmentStats: (id: string) =>
+    request<ItemResponse<{
+      totalActiveUsers: number;
+      totalAcknowledged: number;
+      acknowledgments: Array<{
+        id: string;
+        policyId: string;
+        userId: string;
+        acknowledgedAt: string;
+        user: {
+          id: string;
+          firstName: string;
+          lastName: string;
+          email: string;
+          avatarUrl?: string | null;
+          department?: { id: string; name: string } | null;
+          role?: { name: string; displayName: string } | null;
+        };
+      }>;
+    }>>(`/api/v1/policies/${id}/acknowledgments`),
+
   deletePolicy: (id: string) =>
     request<void>(`/api/v1/policies/${id}`, { method: "DELETE" }),
 

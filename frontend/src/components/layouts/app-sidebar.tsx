@@ -36,6 +36,7 @@ import {
   LifeBuoy,
   Home,
   CheckSquare,
+  Bell,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -64,7 +65,10 @@ interface NavGroup {
 const NAV_GROUPS: NavGroup[] = [
   {
     title: "Main",
-    items: [{ label: "Dashboard", href: "/", icon: LayoutDashboard }],
+    items: [
+      { label: "Dashboard", href: "/", icon: LayoutDashboard },
+      { label: "Notifications", href: "/notifications", icon: Bell },
+    ],
   },
   {
     title: "Organization",

@@ -106,27 +106,25 @@ export class AnnouncementService {
       select: announcementSelect,
     });
 
-    // Broadcast in background to all active users
-    (async () => {
-      try {
-        const users = await prisma.user.findMany({
-          where: { status: "ACTIVE" },
-          select: { id: true },
+    // Broadcast notification to all active users
+    try {
+      const users = await prisma.user.findMany({
+        where: { status: "ACTIVE", deletedAt: null },
+        select: { id: true },
+      });
+      const userIds = users.map((u) => u.id);
+      if (userIds.length > 0) {
+        await notificationService.createMany(userIds, {
+          title: `New Announcement: ${announcement.title}`,
+          message: `A new company announcement "${announcement.title}" has been published.`,
+          type: "announcement",
+          referenceId: announcement.id,
+          link: "/announcements",
         });
-        const userIds = users.map((u) => u.id);
-        if (userIds.length > 0) {
-          await notificationService.createMany(userIds, {
-            title: `New Announcement: ${announcement.title}`,
-            message: `A new company announcement has been published.`,
-            type: "ANNOUNCEMENT",
-            referenceId: announcement.id,
-            link: "/announcements",
-          });
-        }
-      } catch (err) {
-        console.error("Failed to broadcast announcement notification:", err);
       }
-    })();
+    } catch (err) {
+      console.error("Failed to broadcast announcement notification:", err);
+    }
 
     return announcement;
   }
@@ -150,27 +148,25 @@ export class AnnouncementService {
       select: announcementSelect,
     });
 
-    // Broadcast update notification in background
-    (async () => {
-      try {
-        const users = await prisma.user.findMany({
-          where: { status: "ACTIVE" },
-          select: { id: true },
+    // Broadcast update notification
+    try {
+      const users = await prisma.user.findMany({
+        where: { status: "ACTIVE", deletedAt: null },
+        select: { id: true },
+      });
+      const userIds = users.map((u) => u.id);
+      if (userIds.length > 0) {
+        await notificationService.createMany(userIds, {
+          title: `Updated Announcement: ${updated.title}`,
+          message: `The announcement "${updated.title}" has been updated.`,
+          type: "announcement",
+          referenceId: updated.id,
+          link: "/announcements",
         });
-        const userIds = users.map((u) => u.id);
-        if (userIds.length > 0) {
-          await notificationService.createMany(userIds, {
-            title: `Updated Announcement: ${updated.title}`,
-            message: `The announcement "${updated.title}" has been updated.`,
-            type: "ANNOUNCEMENT",
-            referenceId: updated.id,
-            link: "/announcements",
-          });
-        }
-      } catch (err) {
-        console.error("Failed to broadcast announcement update notification:", err);
       }
-    })();
+    } catch (err) {
+      console.error("Failed to broadcast announcement update notification:", err);
+    }
 
     return updated;
   }
