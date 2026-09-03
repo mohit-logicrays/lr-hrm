@@ -294,10 +294,32 @@ async function seedSuperUser(): Promise<void> {
   });
 }
 
+async function seedLeaveTypes(): Promise<void> {
+  const LEAVE_TYPES = [
+    { name: "Casual Leave", code: "CL", maxDaysPerYear: 12, isPaid: true },
+    { name: "Sick Leave", code: "SL", maxDaysPerYear: 10, isPaid: true },
+    { name: "Earned / Privilege Leave", code: "PL", maxDaysPerYear: 15, isPaid: true },
+    { name: "Maternity Leave", code: "ML", maxDaysPerYear: 180, isPaid: true },
+    { name: "Paternity Leave", code: "PTL", maxDaysPerYear: 15, isPaid: true },
+    { name: "Bereavement Leave", code: "BL", maxDaysPerYear: 5, isPaid: true },
+    { name: "Compensatory Off", code: "COMP_OFF", maxDaysPerYear: 12, isPaid: true },
+    { name: "Leave Without Pay", code: "LWP", maxDaysPerYear: null, isPaid: false },
+  ];
+
+  for (const lt of LEAVE_TYPES) {
+    await prisma.leaveType.upsert({
+      where: { code: lt.code },
+      update: { name: lt.name, maxDaysPerYear: lt.maxDaysPerYear, isPaid: lt.isPaid },
+      create: lt,
+    });
+  }
+}
+
 async function main(): Promise<void> {
   await seedPermissions();
   await seedRoles();
   await seedSuperUser();
+  await seedLeaveTypes();
   // eslint-disable-next-line no-console
   console.log("Seed completed successfully");
 }

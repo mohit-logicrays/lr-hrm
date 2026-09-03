@@ -15,6 +15,14 @@ import { usePermission, useAuth } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { ApplyLeaveSheet } from "@/components/leave/ApplyLeaveSheet";
 import { EditLeaveSheet } from "@/components/leave/EditLeaveSheet";
 import { CalendarDayDialog } from "@/components/leave/CalendarDayDialog";
@@ -75,6 +83,35 @@ export default function LeaveManagementPage() {
   const [calendarDate, setCalendarDate] = useState(new Date());
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date | null>(null);
 
+  // Modal Confirmations with Acknowledgement Checkboxes
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    type: "reject" | "cancel" | "delete_type";
+    targetId: string;
+    extraLabel?: string;
+  }>({
+    isOpen: false,
+    title: "",
+    description: "",
+    type: "reject",
+    targetId: "",
+  });
+
+  const [confirmReason, setConfirmReason] = useState("");
+  const [acknowledged, setAcknowledged] = useState(false);
+  const [modalLoading, setModalLoading] = useState(false);
+
+  // Leave Type Create Modal State
+  const [createTypeModal, setCreateTypeModal] = useState(false);
+  const [typeForm, setTypeForm] = useState({
+    name: "",
+    code: "",
+    maxDaysPerYear: "12",
+    isPaid: true,
+  });
+
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
@@ -111,25 +148,98 @@ export default function LeaveManagementPage() {
     }
   }
 
-  async function handleReject(id: string) {
-    if (!window.confirm("Are you sure you want to reject this leave request?")) return;
+  function openRejectModal(request: LeaveRequest) {
+    setConfirmModal({
+      isOpen: true,
+      title: "Reject Leave Request",
+      description: `You are rejecting the leave request submitted by ${request.user?.firstName || "employee"} (${request.days} days).`,
+      type: "reject",
+      targetId: request.id,
+      extraLabel: "Provide a reason for rejection (required):",
+    });
+    setConfirmReason("");
+    setAcknowledged(false);
+  }
+
+  function openCancelModal(request: LeaveRequest) {
+    setConfirmModal({
+      isOpen: true,
+      title: "Cancel Leave Request",
+      description: `Are you sure you want to cancel this ${request.days}-day leave request (${request.startDate} to ${request.endDate})?`,
+      type: "cancel",
+      targetId: request.id,
+    });
+    setConfirmReason("");
+    setAcknowledged(false);
+  }
+
+  function openDeleteTypeModal(type: LeaveType) {
+    setConfirmModal({
+      isOpen: true,
+      title: `Delete Leave Type: ${type.name}`,
+      description: `This will permanently remove the "${type.name}" (${type.code}) leave category from the system.`,
+      type: "delete_type",
+      targetId: type.id,
+    });
+    setConfirmReason("");
+    setAcknowledged(false);
+  }
+
+  async function handleConfirmModalSubmit() {
+    if (!acknowledged) {
+      toast.error("Please check the confirmation acknowledgement box");
+      return;
+    }
+
+    if (confirmModal.type === "reject" && !confirmReason.trim()) {
+      toast.error("Please enter a reason for rejection");
+      return;
+    }
+
     try {
-      await api.approveLeaveRequest(id, "REJECTED");
-      toast.success("Leave request rejected");
+      setModalLoading(true);
+      if (confirmModal.type === "reject") {
+        await api.approveLeaveRequest(confirmModal.targetId, "REJECTED", "HR", confirmReason);
+        toast.success("Leave request rejected");
+      } else if (confirmModal.type === "cancel") {
+        await api.cancelLeaveRequest(confirmModal.targetId);
+        toast.success("Leave request cancelled");
+      } else if (confirmModal.type === "delete_type") {
+        await api.deleteLeaveType(confirmModal.targetId);
+        toast.success("Leave type deleted");
+      }
+      setConfirmModal((prev) => ({ ...prev, isOpen: false }));
       loadData();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to reject request");
+      toast.error(err instanceof Error ? err.message : "Action failed");
+    } finally {
+      setModalLoading(false);
     }
   }
 
-  async function handleCancel(id: string) {
-    if (!window.confirm("Cancel this leave request?")) return;
+  async function handleCreateLeaveType(e: React.FormEvent) {
+    e.preventDefault();
+    if (!typeForm.name.trim() || !typeForm.code.trim()) {
+      toast.error("Please fill in leave type name and code");
+      return;
+    }
+
     try {
-      await api.cancelLeaveRequest(id);
-      toast.success("Leave request cancelled");
+      setModalLoading(true);
+      await api.createLeaveType({
+        name: typeForm.name.trim(),
+        code: typeForm.code.trim().toUpperCase(),
+        maxDaysPerYear: typeForm.maxDaysPerYear ? parseInt(typeForm.maxDaysPerYear, 10) : null,
+        isPaid: typeForm.isPaid,
+      });
+      toast.success("Leave type created successfully");
+      setCreateTypeModal(false);
+      setTypeForm({ name: "", code: "", maxDaysPerYear: "12", isPaid: true });
       loadData();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to cancel request");
+      toast.error(err instanceof Error ? err.message : "Failed to create leave type");
+    } finally {
+      setModalLoading(false);
     }
   }
 
@@ -531,15 +641,15 @@ export default function LeaveManagementPage() {
                                   <Button
                                     size="xs"
                                     onClick={() => handleApproveStage(r.id, isHr ? "HR" : "TL")}
-                                    className="h-7 w-7 p-0 bg-success/10 text-success hover:bg-success hover:text-white rounded transition-colors"
+                                    className="h-7 w-7 p-0 bg-success/10 text-success hover:bg-success hover:text-white rounded transition-colors cursor-pointer"
                                     title="Approve Stage"
                                   >
                                     <Check className="h-4 w-4" />
                                   </Button>
                                   <Button
                                     size="xs"
-                                    onClick={() => handleReject(r.id)}
-                                    className="h-7 w-7 p-0 bg-error/10 text-error hover:bg-error hover:text-white rounded transition-colors"
+                                    onClick={() => openRejectModal(r)}
+                                    className="h-7 w-7 p-0 bg-error/10 text-error hover:bg-error hover:text-white rounded transition-colors cursor-pointer"
                                     title="Reject Request"
                                   >
                                     <X className="h-4 w-4" />
@@ -549,8 +659,8 @@ export default function LeaveManagementPage() {
                                 <Button
                                   variant="ghost"
                                   size="xs"
-                                  onClick={() => handleCancel(r.id)}
-                                  className="text-error hover:bg-error/10 text-xs"
+                                  onClick={() => openCancelModal(r)}
+                                  className="text-error hover:bg-error/10 text-xs cursor-pointer"
                                 >
                                   Cancel
                                 </Button>
@@ -611,26 +721,65 @@ export default function LeaveManagementPage() {
                 </div>
               </div>
             ) : (
-              /* Leave Policies Tab */
-              <div className="p-6 space-y-4 text-xs">
-                <h3 className="font-bold text-sm font-heading text-text-primary">
-                  Logic Rays Technology — Enterprise Leave Policies
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              /* Leave Types & Policies Tab */
+              <div className="p-6 space-y-5 text-xs">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-bold text-sm font-heading text-text-primary">
+                      Enterprise Leave Types & Quotas
+                    </h3>
+                    <p className="text-[11px] text-text-tertiary mt-0.5">
+                      Configured leave categories, annual day allowances, and pay statuses.
+                    </p>
+                  </div>
+                  {isHr && (
+                    <Button
+                      size="sm"
+                      onClick={() => setCreateTypeModal(true)}
+                      className="bg-brand hover:bg-brand/90 text-white font-semibold text-xs h-8 px-3 rounded-lg flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Add Leave Type
+                    </Button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                   {leaveTypes.map((t) => (
                     <div
                       key={t.id}
-                      className="p-3 rounded-lg border border-border-base bg-surface-subtle/30 space-y-1"
+                      className="p-3.5 rounded-xl border border-border-base bg-surface-subtle/30 space-y-1.5 hover:border-brand/30 transition-colors"
                     >
                       <div className="flex justify-between items-center">
-                        <span className="font-bold text-text-primary">{t.name} ({t.code})</span>
-                        <Badge variant="outline" className="text-[9px]">
-                          {t.isPaid ? "Paid" : "Unpaid"}
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-text-primary text-xs">{t.name}</span>
+                          <span className="font-mono text-[10px] text-text-tertiary bg-surface px-1.5 py-0.5 rounded border border-border-base">
+                            {t.code}
+                          </span>
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-[9px] font-bold px-2 py-0.5",
+                            t.isPaid ? "bg-success/10 text-success border-success/30" : "bg-warning/10 text-warning border-warning/30"
+                          )}
+                        >
+                          {t.isPaid ? "PAID" : "UNPAID"}
                         </Badge>
                       </div>
-                      <p className="text-[11px] text-text-tertiary">
-                        Max Allowed: {t.maxDaysPerYear || "Unlimited"} days per calendar year.
-                      </p>
+                      <div className="flex items-center justify-between text-[11px] text-text-tertiary pt-1 border-t border-border-base/50">
+                        <span>
+                          Annual Quota: <strong className="text-text-primary">{t.maxDaysPerYear ? `${t.maxDaysPerYear} days` : "Unlimited"}</strong>
+                        </span>
+                        {isHr && (
+                          <button
+                            type="button"
+                            onClick={() => openDeleteTypeModal(t)}
+                            className="text-text-tertiary hover:text-error transition-colors text-[10px] font-semibold cursor-pointer"
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -793,6 +942,183 @@ export default function LeaveManagementPage() {
         selectedDate={selectedCalendarDate}
         leaveRequests={requests}
       />
+
+      {/* Confirmation Modal with Acknowledgement Checkbox */}
+      <Dialog
+        open={confirmModal.isOpen}
+        onOpenChange={(open) => !open && setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+      >
+        <DialogContent className="sm:max-w-md bg-surface p-6">
+          <DialogHeader className="pb-3 border-b border-border-base">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-error/10 text-error flex items-center justify-center font-bold">
+                <AlertCircle className="h-4 w-4" />
+              </div>
+              <div>
+                <DialogTitle className="font-heading text-base font-bold text-text-primary">
+                  {confirmModal.title}
+                </DialogTitle>
+                <DialogDescription className="text-xs text-text-tertiary">
+                  Please review the action details and confirm below.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="space-y-4 pt-3">
+            <p className="text-xs text-text-secondary leading-relaxed bg-surface-subtle/50 p-3 rounded-lg border border-border-base">
+              {confirmModal.description}
+            </p>
+
+            {/* Optional / Required Reason Input (for Rejection) */}
+            {confirmModal.type === "reject" && (
+              <div className="space-y-1.5">
+                <label className="font-semibold text-xs text-text-primary">
+                  {confirmModal.extraLabel || "Reason for Rejection*"}
+                </label>
+                <textarea
+                  className="w-full h-20 p-2.5 rounded-lg border border-border-base bg-surface text-text-primary text-xs focus:border-error focus:outline-none resize-none"
+                  placeholder="Explain why this request is being rejected (e.g. insufficient coverage, project deadline)..."
+                  value={confirmReason}
+                  onChange={(e) => setConfirmReason(e.target.value)}
+                  required
+                />
+              </div>
+            )}
+
+            {/* Mandatory Acknowledgement Checkbox */}
+            <div className="p-3 rounded-lg border border-border-base bg-surface-subtle/40 flex items-start gap-3">
+              <input
+                id="ack-confirm-check"
+                type="checkbox"
+                checked={acknowledged}
+                onChange={(e) => setAcknowledged(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-border-base text-brand focus:ring-brand accent-brand cursor-pointer"
+              />
+              <label
+                htmlFor="ack-confirm-check"
+                className="text-xs font-medium text-text-primary leading-tight cursor-pointer select-none"
+              >
+                I confirm that I have reviewed this action and understand that it will update records immediately.
+              </label>
+            </div>
+          </div>
+
+          <DialogFooter className="pt-4 border-t border-border-base flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+              disabled={modalLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={!acknowledged || modalLoading}
+              onClick={handleConfirmModalSubmit}
+              className="bg-error hover:bg-error/90 text-white font-bold"
+            >
+              {modalLoading ? "Processing..." : "Confirm Action"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Leave Type Modal */}
+      <Dialog open={createTypeModal} onOpenChange={(open) => !open && setCreateTypeModal(false)}>
+        <DialogContent className="sm:max-w-md bg-surface p-6">
+          <DialogHeader className="pb-3 border-b border-border-base">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-brand/10 text-brand flex items-center justify-center font-bold">
+                <Plus className="h-4 w-4" />
+              </div>
+              <div>
+                <DialogTitle className="font-heading text-base font-bold text-text-primary">
+                  Create Leave Type
+                </DialogTitle>
+                <DialogDescription className="text-xs text-text-tertiary">
+                  Define a new category and yearly allowance for time off.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <form onSubmit={handleCreateLeaveType} className="space-y-4 pt-3">
+            <div className="space-y-1.5">
+              <label className="font-semibold text-xs text-text-primary">Leave Name*</label>
+              <input
+                type="text"
+                placeholder="e.g. Marriage Leave / Sabbatical"
+                value={typeForm.name}
+                onChange={(e) => setTypeForm((prev) => ({ ...prev, name: e.target.value }))}
+                className="w-full h-9 px-3 rounded-lg border border-border-base bg-surface text-text-primary text-xs focus:border-brand focus:outline-none"
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="font-semibold text-xs text-text-primary">Code*</label>
+                <input
+                  type="text"
+                  placeholder="e.g. ML"
+                  value={typeForm.code}
+                  onChange={(e) => setTypeForm((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
+                  className="w-full h-9 px-3 rounded-lg border border-border-base bg-surface text-text-primary text-xs font-mono focus:border-brand focus:outline-none"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-semibold text-xs text-text-primary">Max Days / Year</label>
+                <input
+                  type="number"
+                  placeholder="e.g. 15 (leave empty for unlimited)"
+                  value={typeForm.maxDaysPerYear}
+                  onChange={(e) => setTypeForm((prev) => ({ ...prev, maxDaysPerYear: e.target.value }))}
+                  className="w-full h-9 px-3 rounded-lg border border-border-base bg-surface text-text-primary text-xs focus:border-brand focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="p-3 rounded-lg border border-border-base bg-surface-subtle/40 flex items-center justify-between">
+              <div className="space-y-0.5">
+                <span className="font-bold text-xs text-text-primary">Paid Leave</span>
+                <p className="text-[11px] text-text-tertiary">Employees are compensated for these days.</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={typeForm.isPaid}
+                onChange={(e) => setTypeForm((prev) => ({ ...prev, isPaid: e.target.checked }))}
+                className="h-4 w-4 rounded border-border-base text-brand focus:ring-brand accent-brand cursor-pointer"
+              />
+            </div>
+
+            <DialogFooter className="pt-4 border-t border-border-base flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setCreateTypeModal(false)}
+                disabled={modalLoading}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={modalLoading}
+                className="bg-brand hover:bg-brand/90 text-white font-bold"
+              >
+                {modalLoading ? "Creating..." : "Create Leave Type"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
