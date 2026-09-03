@@ -3,6 +3,7 @@ import { prisma } from "../../config/prisma";
 import { AppError } from "../../utils/AppError";
 import { calculateNetWorkingDays } from "../../utils/workingDays";
 import { approvalEngine } from "../wfh/approval.engine";
+import { notificationService } from "../notifications/notification.service";
 import type {
   CreateLeaveTypeInput,
   UpdateLeaveTypeInput,
@@ -283,6 +284,26 @@ export class LeaveService {
       data.reason ? `Leave application submitted: ${data.reason}` : "Leave application submitted"
     );
 
+    // Send notifications to HR, Team Leads (TL), Project Managers (PM), and Reporting Managers
+    try {
+      const approvers = await approvalEngine.getApproverIdsForUser(targetUser);
+      const applicantName = `${created.user?.firstName || ""} ${created.user?.lastName || ""}`.trim() || created.user?.email || "Employee";
+      const leaveTypeName = created.leaveType?.name || "Leave";
+      const dateRangeStr = `${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()}`;
+
+      if (approvers.allApproverIds.length > 0) {
+        await notificationService.createMany(approvers.allApproverIds, {
+          title: "New Leave Application",
+          message: `${applicantName} submitted a ${leaveTypeName} request (${days} ${days === 1 ? "day" : "days"}) for ${dateRangeStr}`,
+          type: "leave",
+          referenceId: created.id,
+          link: "/leave",
+        });
+      }
+    } catch (err) {
+      console.error("Failed to send leave creation notifications:", err);
+    }
+
     return created;
   }
 
@@ -380,6 +401,23 @@ export class LeaveService {
         approvedBy,
         comment || `${approvalRole} approval recorded${isFinalApproval ? " (Final Approval)" : ""}`
       );
+    }
+
+    // Send notification to applicant regarding the stage decision
+    try {
+      const isApproved = status === "APPROVED";
+      await notificationService.create({
+        userId: existing.userId,
+        title: isApproved ? `Leave Request ${approvalRole} Approved` : `Leave Request Rejected by ${approvalRole}`,
+        message: isApproved
+          ? `Your leave request for ${existing.startDate.toLocaleDateString()} has been approved by ${approvalRole}.`
+          : `Your leave request for ${existing.startDate.toLocaleDateString()} was rejected by ${approvalRole}.${comment ? ` Reason: ${comment}` : ""}`,
+        type: "leave",
+        referenceId: id,
+        link: "/leave",
+      });
+    } catch (err) {
+      console.error("Failed to notify applicant of leave status change:", err);
     }
 
     return prisma.leaveRequest.findUnique({ where: { id }, select: leaveRequestSelect });

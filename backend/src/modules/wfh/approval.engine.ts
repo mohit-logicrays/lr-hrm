@@ -36,6 +36,79 @@ export class ApprovalEngine {
     return false;
   }
 
+  async getApproverIdsForUser(targetUserId: string): Promise<{
+    hrIds: string[];
+    tlIds: string[];
+    pmIds: string[];
+    reportingManagerIds: string[];
+    allApproverIds: string[];
+  }> {
+    const [hrUsers, emp, ledTeams, userProjects] = await Promise.all([
+      // 1. All HR Admins and Superadmins
+      prisma.user.findMany({
+        where: { deletedAt: null, role: { name: { in: ["hr", "superadmin"] } } },
+        select: { id: true },
+      }),
+      // 2. Direct Employment hierarchy (Reporting Manager + Project Manager)
+      prisma.userCurrentEmployment.findUnique({
+        where: { userId: targetUserId },
+        select: { reportingManagerId: true, projectManagerId: true },
+      }),
+      // 3. Team Leads of any team the target user belongs to
+      prisma.teamMember.findMany({
+        where: {
+          isTeamLead: true,
+          team: {
+            deletedAt: null,
+            members: { some: { userId: targetUserId } },
+          },
+        },
+        select: { userId: true },
+      }),
+      // 4. Project Managers of projects the user is on + Members with role LEAD
+      prisma.project.findMany({
+        where: {
+          deletedAt: null,
+          members: { some: { userId: targetUserId } },
+        },
+        select: {
+          projectManagerId: true,
+          members: {
+            where: { roleInProject: "LEAD" },
+            select: { userId: true },
+          },
+        },
+      }),
+    ]);
+
+    const hrIds = hrUsers.map((u) => u.id);
+    const tlSet = new Set<string>();
+    ledTeams.forEach((lt) => tlSet.add(lt.userId));
+    userProjects.forEach((p) => {
+      p.members.forEach((m) => tlSet.add(m.userId));
+    });
+
+    const pmSet = new Set<string>();
+    if (emp?.projectManagerId) pmSet.add(emp.projectManagerId);
+    userProjects.forEach((p) => {
+      if (p.projectManagerId) pmSet.add(p.projectManagerId);
+    });
+
+    const repSet = new Set<string>();
+    if (emp?.reportingManagerId) repSet.add(emp.reportingManagerId);
+
+    const allSet = new Set<string>([...hrIds, ...Array.from(tlSet), ...Array.from(pmSet), ...Array.from(repSet)]);
+    allSet.delete(targetUserId);
+
+    return {
+      hrIds,
+      tlIds: Array.from(tlSet).filter((id) => id !== targetUserId),
+      pmIds: Array.from(pmSet).filter((id) => id !== targetUserId),
+      reportingManagerIds: Array.from(repSet).filter((id) => id !== targetUserId),
+      allApproverIds: Array.from(allSet),
+    };
+  }
+
   async getSupervisedUserIds(approverId: string, approverRoleName: string, isSpecialRole = false): Promise<string[] | null> {
     if (isSpecialRole || ["superadmin", "hr"].includes(approverRoleName.toLowerCase())) return null;
 

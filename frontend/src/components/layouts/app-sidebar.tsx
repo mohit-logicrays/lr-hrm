@@ -93,7 +93,6 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Support", href: "/support", icon: LifeBuoy },
       { label: "Requests", href: "/requests", icon: ListChecks, resource: "request" },
-      { label: "My Profile", href: "/profile", icon: UserIcon },
     ],
   },
 ];
@@ -241,6 +240,14 @@ function NavButton({
 }) {
   const isSuperadmin = (role || "").toUpperCase() === "SUPERADMIN";
   const hasSpecialAccess = isSuperadmin || !!isSpecialRole;
+
+  // Time Logs not required in HR
+  if (item.href === "/time") {
+    const roleUpper = (role || "").toUpperCase();
+    if (roleUpper === "HR" || roleUpper === "HR_ADMIN") {
+      return null;
+    }
+  }
 
   // Requests module MUST be visible ONLY to SUPERADMIN
   if (item.href === "/requests" && !isSuperadmin) {
