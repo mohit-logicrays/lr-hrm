@@ -15,6 +15,9 @@ import { FolderKanban } from "lucide-react";
 
 export default function ProjectsPage() {
   const perms = usePermission("project");
+  const deptPerms = usePermission("department");
+  const teamPerms = usePermission("team");
+  const userPerms = usePermission("user");
   const [result, setResult] = useState<{ data: Project[]; total: number; totalPages: number } | null>(null);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -34,15 +37,7 @@ export default function ProjectsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [projectsRes, depsRes, teamsRes, usersRes] = await Promise.all([
-        api.listProjects(page, 100, search, (statusFilter as ProjectStatus) || undefined, (priorityFilter as ProjectPriority) || undefined),
-        api.listDepartments(1, 100),
-        api.listTeams(1, 100),
-        api.listUsers(1, 100),
-      ]);
-      setDepartments(depsRes.data);
-      setTeams(teamsRes.data);
-      setUsers(usersRes.data);
+      const projectsRes = await api.listProjects(page, 100, search, (statusFilter as ProjectStatus) || undefined, (priorityFilter as ProjectPriority) || undefined);
       setResult({
         data: projectsRes.data,
         total: projectsRes.pagination.total,
@@ -54,6 +49,20 @@ export default function ProjectsPage() {
       setLoading(false);
     }
   }, [page, search, statusFilter, priorityFilter]);
+
+  // Load departments/teams/users for the create/edit sheet — best-effort and
+  // non-blocking, and only fired when the role actually has read access so a
+  // denied request never reaches the server.
+  useEffect(() => {
+    const loadAux = async () => {
+      const tasks: Promise<unknown>[] = [];
+      if (deptPerms.read) tasks.push(api.listDepartments(1, 100).then((r) => setDepartments(r.data)).catch(() => {}));
+      if (teamPerms.read) tasks.push(api.listTeams(1, 100).then((r) => setTeams(r.data)).catch(() => {}));
+      if (userPerms.read) tasks.push(api.listUsers(1, 100).then((r) => setUsers(r.data)).catch(() => {}));
+      await Promise.all(tasks);
+    };
+    loadAux();
+  }, [deptPerms, teamPerms, userPerms]);
 
   useEffect(() => {
     load();

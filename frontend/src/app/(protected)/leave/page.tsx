@@ -62,6 +62,7 @@ type LeaveTab = "my_leaves" | "team_requests" | "calendar" | "policies";
 export default function LeaveManagementPage() {
   const { user } = useAuth();
   const perms = usePermission("leave");
+  const userPerms = usePermission("user");
   const canApprove = Boolean(perms.approve || perms.read_all);
 
   // Check if current user has HR Admin / Superadmin role for HR-only actions
@@ -139,23 +140,36 @@ export default function LeaveManagementPage() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const [reqsRes, typesRes, balRes, usersRes] = await Promise.all([
+      const [reqsRes, typesRes, balRes] = await Promise.all([
         api.listLeaveRequests(1, 100),
         api.listLeaveTypes(1, 50),
         api.getLeaveBalance(),
-        api.listUsers(1, 100),
       ]);
 
       setRequests(reqsRes.data);
       setLeaveTypes(typesRes.data);
       setMyBalances(balRes.data?.balances || []);
-      setUsers(usersRes.data);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load leave management data");
     } finally {
       setLoading(false);
     }
   }, []);
+
+  // Load users for the HR/manager approval views — best-effort and
+  // non-blocking so a missing user:read permission doesn't hide leave data.
+  useEffect(() => {
+    if (!userPerms.read) return;
+    const loadUsers = async () => {
+      try {
+        const usersRes = await api.listUsers(1, 100);
+        setUsers(usersRes.data);
+      } catch {
+        /* secondary lookups are optional */
+      }
+    };
+    loadUsers();
+  }, [loadData, userPerms.read]);
 
   useEffect(() => {
     loadData();

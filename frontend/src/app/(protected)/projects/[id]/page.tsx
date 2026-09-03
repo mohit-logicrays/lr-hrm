@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, use } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { usePermission } from "@/providers/auth-provider";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   api,
@@ -62,6 +63,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
   const [projectDetail, setProjectDetail] = useState<ProjectDetail | null>(null);
   const [users, setUsers] = useState<User[]>([]);
+  const userPerms = usePermission("user");
   const [loading, setLoading] = useState(true);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
@@ -86,18 +88,29 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
   const load = useCallback(async () => {
     try {
-      const [res, usersRes] = await Promise.all([
-        api.getProject(projectId),
-        api.listUsers(1, 100),
-      ]);
+      const res = await api.getProject(projectId);
       setProjectDetail(res.data);
-      setUsers(usersRes.data);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load project details");
     } finally {
       setLoading(false);
     }
   }, [projectId]);
+
+  // Load users for the add-member selector — best-effort and non-blocking so a
+  // missing user:read permission doesn't prevent viewing the project.
+  useEffect(() => {
+    if (!userPerms.read) return;
+    const loadUsers = async () => {
+      try {
+        const usersRes = await api.listUsers(1, 100);
+        setUsers(usersRes.data);
+      } catch {
+        /* secondary lookup is optional */
+      }
+    };
+    loadUsers();
+  }, [projectId, userPerms.read]);
 
   useEffect(() => {
     load();

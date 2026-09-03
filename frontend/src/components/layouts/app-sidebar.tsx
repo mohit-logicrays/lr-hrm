@@ -252,6 +252,8 @@ function NavButton({
   const isSuperadmin = (role || "").toUpperCase() === "SUPERADMIN";
   const hasSpecialAccess = isSuperadmin || !!isSpecialRole;
 
+  const perms = usePermission(item.resource ?? "");
+
   // Time Logs not required in HR
   if (item.href === "/time") {
     const roleUpper = (role || "").toUpperCase();
@@ -270,6 +272,25 @@ function NavButton({
     return null;
   }
 
+  // Teams & Departments — read-only access for most roles, but the UI is hidden
+  // for every role other than Superadmin and the Special Group.
+  if ((item.href === "/teams" || item.href === "/departments") && !hasSpecialAccess) {
+    return null;
+  }
+
+  // Users — visible only when the role can actually manage users (create/update/
+  // delete/manage/assign_role). A read-only listing (e.g. manager/lead) is hidden.
+  if (item.href === "/users" && !hasSpecialAccess) {
+    const userCanWrite = [
+      "create",
+      "update",
+      "delete",
+      "manage",
+      "assign_role",
+    ].some((a) => perms[a]);
+    if (!userCanWrite) return null;
+  }
+
   // WFH Approvals visible to TL, PM, HR, Superadmin, Special Group
   if (item.href === "/wfh/approvals") {
     const roleLower = (role || "").toLowerCase();
@@ -277,7 +298,6 @@ function NavButton({
     if (!canApprove) return null;
   }
 
-  const perms = usePermission(item.resource ?? "");
   const canRead =
     perms.read || perms.read_all || perms.read_own || perms.type_read;
 

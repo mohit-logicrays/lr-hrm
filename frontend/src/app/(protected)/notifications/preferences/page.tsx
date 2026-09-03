@@ -98,12 +98,12 @@ export default function NotificationPreferencesPage() {
         <div>
           <Link
             href="/notifications"
-            className="inline-flex items-center gap-1 text-xs text-brand hover:underline font-semibold mb-2"
+            className="inline-flex items-center gap-1 text-[11px] text-brand hover:underline font-semibold mb-1"
           >
-            <ArrowLeft className="h-3.5 w-3.5" /> Back to Notifications
+            <ArrowLeft className="h-3 w-3" /> Back to Notifications
           </Link>
           <h1 className="text-2xl font-bold font-heading tracking-tight text-text-primary flex items-center gap-2">
-            Notification Preferences
+            <Bell className="h-6 w-6 text-brand" /> Notification Preferences
           </h1>
           <p className="text-xs text-text-tertiary mt-1">
             Choose what alerts you receive via In-App, Email, and Browser Push notifications.
@@ -120,7 +120,7 @@ export default function NotificationPreferencesPage() {
       </div>
 
       {/* Push Notification Device Permission Card */}
-      <Card className="p-5 border border-brand/30 bg-brand/5 rounded-2xl shadow-2xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <Card className="p-5 border border-brand/30 bg-brand/5 rounded-2xl shadow-2xs hover:border-brand/50 transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5">
           <div className="w-10 h-10 rounded-xl bg-brand text-white flex items-center justify-center font-bold shrink-0">
             <Smartphone className="h-5 w-5" />
@@ -150,7 +150,7 @@ export default function NotificationPreferencesPage() {
       {/* Module Channels Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Email Notifications */}
-        <Card className="p-6 border border-border-base bg-surface rounded-2xl shadow-2xs space-y-4">
+        <Card className="p-6 border border-border-base bg-surface rounded-2xl shadow-2xs space-y-4 hover:border-brand/30 transition-all">
           <div className="flex items-center gap-2.5 pb-3 border-b border-border-base">
             <Mail className="h-5 w-5 text-brand" />
             <div>
@@ -183,7 +183,7 @@ export default function NotificationPreferencesPage() {
         </Card>
 
         {/* Push Notifications */}
-        <Card className="p-6 border border-border-base bg-surface rounded-2xl shadow-2xs space-y-4">
+        <Card className="p-6 border border-border-base bg-surface rounded-2xl shadow-2xs space-y-4 hover:border-brand/30 transition-all">
           <div className="flex items-center gap-2.5 pb-3 border-b border-border-base">
             <Smartphone className="h-5 w-5 text-brand" />
             <div>
@@ -217,7 +217,7 @@ export default function NotificationPreferencesPage() {
       </div>
 
       {/* Quiet Hours Card */}
-      <Card className="p-6 border border-border-base bg-surface rounded-2xl shadow-2xs space-y-4">
+      <Card className="p-6 border border-border-base bg-surface rounded-2xl shadow-2xs space-y-4 hover:border-brand/30 transition-all">
         <div className="flex items-center gap-2.5 pb-3 border-b border-border-base">
           <Moon className="h-5 w-5 text-brand" />
           <div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import {
@@ -8,41 +8,77 @@ import {
   CheckCheck,
   Trash2,
   Settings,
-  Filter,
-  ChevronLeft,
-  ChevronRight,
   Inbox,
-  Sparkles,
+  X,
+  Search,
+  LayoutList,
+  LayoutGrid,
 } from "lucide-react";
 import Link from "next/link";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { api, type NotificationItem } from "@/lib/api";
-import { NotificationItemRow } from "@/components/notifications/NotificationItem";
 import { cn } from "@/lib/utils";
 
-export default function NotificationsCenterPage() {
-  const [items, setItems] = useState<NotificationItem[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [totalCount, setTotalCount] = useState(0);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [filter, setFilter] = useState<"all" | "unread">("all");
-  const [typeFilter, setTypeFilter] = useState<string>("");
-  const [loading, setLoading] = useState(true);
+// Notification sub-components
+import { NotificationFilterBar }  from "@/components/notifications/NotificationFilterBar";
+import { NotificationBulkBar }    from "@/components/notifications/NotificationBulkBar";
+import { NotificationGroup }      from "@/components/notifications/NotificationGroup";
+import { NotificationCardGrid }   from "@/components/notifications/NotificationCardGrid";
+import { NotificationPagination } from "@/components/notifications/NotificationPagination";
+import { MarkAllReadDialog }       from "@/components/notifications/MarkAllReadDialog";
+import { groupNotificationsByDate } from "@/components/notifications/notification-utils";
 
-  // Bulk Selection States
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+const PAGE_SIZE = 20;
+
+const pageVariants = {
+  hidden:  { opacity: 0, y: 15 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.35 } },
+};
+
+type ViewMode = "list" | "card";
+
+export default function NotificationsCenterPage() {
+  // ── Data state ────────────────────────────────────────────────────────────
+  const [items,       setItems]       = useState<NotificationItem[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [totalCount,  setTotalCount]  = useState(0);
+  const [totalPages,  setTotalPages]  = useState(1);
+  const [loading,     setLoading]     = useState(true);
+
+  // ── Filter state ──────────────────────────────────────────────────────────
+  const [page,      setPage]      = useState(1);
+  const [activeTab, setActiveTab] = useState<string>("");
+  const [search,    setSearch]    = useState("");
+  const [dateRange, setDateRange] = useState("7");
+  const [priority,  setPriority]  = useState("");
+
+  // ── UI state ──────────────────────────────────────────────────────────────
+  const [viewMode,         setViewMode]         = useState<ViewMode>("list");
+  const [markAllDialogOpen,setMarkAllDialogOpen] = useState(false);
+
+  // ── Bulk selection ────────────────────────────────────────────────────────
+  const [selectedIds,     setSelectedIds]     = useState<Set<string>>(new Set());
   const [isBulkOperating, setIsBulkOperating] = useState(false);
 
-  async function loadData() {
+  // ── Data loading ──────────────────────────────────────────────────────────
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.listNotifications(page, 20, filter === "unread");
+      const isUnread = activeTab === "unread";
+      const res = await api.listNotifications(page, PAGE_SIZE, isUnread);
       let list = res.data || [];
-      if (typeFilter) {
-        list = list.filter((n) => n.type.toLowerCase() === typeFilter.toLowerCase());
+
+      if (activeTab && activeTab !== "unread") {
+        list = list.filter((n) => n.type?.toLowerCase() === activeTab);
       }
+      if (search.trim()) {
+        const q = search.trim().toLowerCase();
+        list = list.filter(
+          (n) => n.title?.toLowerCase().includes(q) || n.message?.toLowerCase().includes(q)
+        );
+      }
+
       setItems(list);
       setUnreadCount(res.unreadCount || 0);
       setTotalCount(res.pagination?.total || list.length);
@@ -52,79 +88,54 @@ export default function NotificationsCenterPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [page, activeTab, search]);
 
-  useEffect(() => {
-    loadData();
-    setSelectedIds(new Set());
-  }, [page, filter, typeFilter]);
+  useEffect(() => { loadData(); setSelectedIds(new Set()); }, [page, activeTab, search]);
 
-  // Proactive periodic polling (every 15s) + focus sync
   useEffect(() => {
     const interval = setInterval(loadData, 15000);
-    const onFocus = () => {
-      if (document.visibilityState === "visible") loadData();
-    };
+    const onFocus  = () => { if (document.visibilityState === "visible") loadData(); };
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onFocus);
+    return () => { clearInterval(interval); window.removeEventListener("focus", onFocus); document.removeEventListener("visibilitychange", onFocus); };
+  }, [loadData]);
 
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener("focus", onFocus);
-      document.removeEventListener("visibilitychange", onFocus);
-    };
-  }, [page, filter, typeFilter]);
+  // ── Selection helpers ─────────────────────────────────────────────────────
+  const isAllPageSelected = items.length > 0 && selectedIds.size === items.length;
+  const isSomeSelected    = selectedIds.size > 0 && !isAllPageSelected;
 
-  const toggleSelect = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
+  const toggleSelect  = (id: string) =>
+    setSelectedIds((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
 
-  const selectAllPage = () => {
-    if (selectedIds.size === items.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(items.map((i) => i.id)));
-    }
-  };
+  const selectAllPage = () =>
+    setSelectedIds(isAllPageSelected ? new Set() : new Set(items.map((i) => i.id)));
 
+  const clearSelected = () => setSelectedIds(new Set());
+
+  // ── Actions ───────────────────────────────────────────────────────────────
   async function handleMarkRead(id: string) {
     try {
       await api.markNotificationRead(id);
-      setItems((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
-      );
+      setItems((prev) => prev.map((n) => n.id === id ? { ...n, isRead: true } : n));
       setUnreadCount((prev) => Math.max(0, prev - 1));
-    } catch {
-      toast.error("Failed to mark as read");
-    }
+    } catch { toast.error("Failed to mark as read"); }
   }
 
-  // Bulk Read Selected Items
-  async function handleBulkReadSelected() {
-    if (selectedIds.size === 0) return;
+  async function handleBulkMarkRead() {
+    if (!selectedIds.size) return;
     try {
       setIsBulkOperating(true);
-      const idsToMark = Array.from(selectedIds);
-      await Promise.all(idsToMark.map((id) => api.markNotificationRead(id)));
-      setItems((prev) =>
-        prev.map((n) => (selectedIds.has(n.id) ? { ...n, isRead: true } : n))
-      );
+      const ids = Array.from(selectedIds);
+      await Promise.all(ids.map((id) => api.markNotificationRead(id)));
+      const wasUnread = items.filter((n) => selectedIds.has(n.id) && !n.isRead).length;
+      setItems((prev) => prev.map((n) => selectedIds.has(n.id) ? { ...n, isRead: true } : n));
+      setUnreadCount((prev) => Math.max(0, prev - wasUnread));
       setSelectedIds(new Set());
-      setUnreadCount((prev) => Math.max(0, prev - idsToMark.length));
-      toast.success(`Marked ${idsToMark.length} notifications as read`);
-    } catch {
-      toast.error("Failed to mark selected notifications as read");
-    } finally {
-      setIsBulkOperating(false);
-    }
+      toast.success(`Marked ${ids.length} notification${ids.length !== 1 ? "s" : ""} as read`);
+    } catch { toast.error("Failed to mark selected as read"); }
+    finally { setIsBulkOperating(false); }
   }
 
-  // Wildcard Global Mark All Read (All Pages across Entire Database)
   async function handleMarkAllRead() {
     try {
       setIsBulkOperating(true);
@@ -132,246 +143,284 @@ export default function NotificationsCenterPage() {
       setItems((prev) => prev.map((n) => ({ ...n, isRead: true })));
       setSelectedIds(new Set());
       setUnreadCount(0);
-      toast.success("All notifications across entire account marked as read");
-    } catch {
-      toast.error("Failed to mark all as read");
-    } finally {
-      setIsBulkOperating(false);
-    }
+      setMarkAllDialogOpen(false);
+      toast.success("All notifications marked as read");
+    } catch { toast.error("Failed to mark all as read"); }
+    finally { setIsBulkOperating(false); }
   }
 
   async function handleDelete(id: string) {
     try {
       await api.deleteNotification(id);
       setItems((prev) => prev.filter((n) => n.id !== id));
-      setSelectedIds((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
+      setSelectedIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
       toast.success("Notification removed");
-    } catch {
-      toast.error("Failed to delete notification");
-    }
+    } catch { toast.error("Failed to delete notification"); }
   }
 
   async function handleClearAll() {
-    if (!window.confirm("Are you sure you want to clear all your notifications?")) return;
+    if (!window.confirm("Clear all your notifications? This cannot be undone.")) return;
     try {
       await api.clearAllNotifications();
-      setItems([]);
-      setSelectedIds(new Set());
-      setUnreadCount(0);
+      setItems([]); setSelectedIds(new Set()); setUnreadCount(0); setTotalCount(0);
       toast.success("All notifications cleared");
-    } catch {
-      toast.error("Failed to clear notifications");
-    }
+    } catch { toast.error("Failed to clear notifications"); }
   }
 
-  const isAllPageSelected = items.length > 0 && selectedIds.size === items.length;
+  async function handleApprove(item: NotificationItem) {
+    if (!item.isRead) await handleMarkRead(item.id);
+    if (item.link) window.location.href = item.link;
+  }
+  async function handleReject(item: NotificationItem) {
+    if (!item.isRead) await handleMarkRead(item.id);
+    if (item.link) window.location.href = item.link;
+  }
 
+  // ── Derived ───────────────────────────────────────────────────────────────
+  const groups     = groupNotificationsByDate(items);
+  const hasFilters = !!(search || (activeTab && activeTab !== ""));
+
+  function clearFilters() { setSearch(""); setActiveTab(""); setPage(1); }
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold font-heading tracking-tight text-text-primary flex items-center gap-2.5">
-            <Bell className="h-6 w-6 text-brand" />
-            Notification Center
-            {unreadCount > 0 && (
-              <span className="text-xs bg-brand/10 text-brand px-2.5 py-0.5 rounded-full font-mono font-semibold">
-                {unreadCount} Unread
-              </span>
-            )}
-          </h1>
-          <p className="text-xs text-text-tertiary mt-1">
-            Real-time alerts, announcements, policies, approvals, and reminders.
-          </p>
-        </div>
+    <>
+      <motion.div
+        variants={pageVariants}
+        initial="hidden"
+        animate="visible"
+        className="flex flex-col w-full"
+      >
+        {/* ══════════════════════════════════════════════════════════════
+            Header & Actions
+        ══════════════════════════════════════════════════════════════ */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h1 className="text-2xl font-bold font-heading tracking-tight text-text-primary flex items-center gap-2">
+              <Bell className="h-6 w-6 text-brand" /> Notifications
+              {unreadCount > 0 && (
+                <span className="text-[11px] bg-brand text-white px-2 py-0.5 rounded-full font-mono font-bold shadow-sm ml-1">
+                  {unreadCount}
+                </span>
+              )}
+            </h1>
+            <p className="text-xs text-text-tertiary mt-1">
+              Manage your alerts, approvals, and system updates.
+            </p>
+          </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Wildcard Bulk Read */}
-          {unreadCount > 0 && (
+          <div className="flex items-center gap-2 flex-wrap">
             <Button
               variant="outline"
-              size="sm"
-              onClick={handleMarkAllRead}
-              disabled={isBulkOperating}
-              className="text-xs h-8 gap-1.5 font-semibold text-brand border-brand/30 hover:bg-brand/10 cursor-pointer shadow-2xs"
+              onClick={() => setMarkAllDialogOpen(true)}
+              disabled={unreadCount === 0 || isBulkOperating}
+              className="bg-surface text-text-secondary hover:text-text-primary hover:bg-surface-subtle text-xs h-9 px-4 gap-1.5 font-semibold cursor-pointer shadow-2xs border border-border-base disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <CheckCheck className="h-3.5 w-3.5" /> Mark Everything Read (Wildcard)
+              <CheckCheck className="h-3.5 w-3.5" />
+              Mark all as read
             </Button>
-          )}
 
-          {items.length > 0 && (
             <Button
-              variant="outline"
-              size="sm"
-              onClick={handleClearAll}
-              className="text-xs h-8 gap-1.5 font-medium text-text-secondary hover:text-error hover:border-error/30 cursor-pointer"
+              asChild
+              className="bg-brand text-white hover:bg-brand-hover text-xs h-9 px-4 gap-1.5 font-semibold cursor-pointer shadow-2xs"
             >
-              <Trash2 className="h-3.5 w-3.5" /> Clear All
+              <Link href="/notifications/preferences">
+                <Settings className="h-3.5 w-3.5" />
+                Settings
+              </Link>
             </Button>
-          )}
-
-          <Button
-            asChild
-            variant="outline"
-            size="sm"
-            className="text-xs h-8 gap-1.5 font-medium cursor-pointer"
-          >
-            <Link href="/notifications/preferences">
-              <Settings className="h-3.5 w-3.5" /> Preferences
-            </Link>
-          </Button>
+          </div>
         </div>
-      </div>
 
-      {/* Filter Tabs & Bulk Actions Bar */}
-      <Card className="p-4 border border-border-base bg-surface shadow-2xs rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
-          {/* Bulk Select Page Checkbox */}
-          {items.length > 0 && (
-            <div className="flex items-center gap-2 mr-2 pr-3 border-r border-border-base">
-              <input
-                type="checkbox"
-                id="select-all-checkbox"
-                checked={isAllPageSelected}
-                onChange={selectAllPage}
-                className="h-4 w-4 rounded border-border-base text-brand focus:ring-brand cursor-pointer accent-brand"
-              />
-              <label htmlFor="select-all-checkbox" className="text-xs font-semibold text-text-secondary cursor-pointer select-none">
-                Select Page ({selectedIds.size}/{items.length})
-              </label>
+        {/* ══════════════════════════════════════════════════════════════
+            Filter, Search & View Switcher Bar
+        ══════════════════════════════════════════════════════════════ */}
+        <Card className="p-4 border border-border-base bg-surface shadow-2xs rounded-2xl mb-6 space-y-3">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+            <NotificationFilterBar
+              activeTab={activeTab}
+              onTabChange={(t) => { setActiveTab(t); setPage(1); }}
+              dateRange={dateRange}
+              onDateRangeChange={setDateRange}
+              priority={priority}
+              onPriorityChange={setPriority}
+              unreadCount={unreadCount}
+            />
+
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="relative max-w-xs">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-text-tertiary" />
+                <input
+                  type="text"
+                  placeholder="Search notifications…"
+                  value={search}
+                  onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                  className="w-full pl-8 pr-8 py-1.5 text-xs rounded-xl border border-border-base bg-surface-subtle text-text-primary placeholder:text-text-tertiary focus:border-brand focus:outline-none"
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => { setSearch(""); setPage(1); }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-error transition-colors cursor-pointer"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center border border-border-base rounded-lg p-0.5 bg-surface-subtle">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("list")}
+                  title="List view"
+                  className={cn(
+                    "p-1.5 rounded-md transition-colors cursor-pointer",
+                    viewMode === "list"
+                      ? "bg-surface text-brand shadow-2xs"
+                      : "text-text-tertiary hover:text-text-primary"
+                  )}
+                >
+                  <LayoutList className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("card")}
+                  title="Card view"
+                  className={cn(
+                    "p-1.5 rounded-md transition-colors cursor-pointer",
+                    viewMode === "card"
+                      ? "bg-surface text-brand shadow-2xs"
+                      : "text-text-tertiary hover:text-text-primary"
+                  )}
+                >
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
-          )}
+          </div>
+        </Card>
 
-          {/* Selected Action Buttons */}
-          {selectedIds.size > 0 && (
-            <Button
-              size="sm"
-              onClick={handleBulkReadSelected}
-              disabled={isBulkOperating}
-              className="text-xs h-7 px-2.5 bg-brand text-white font-semibold cursor-pointer shadow-2xs gap-1"
-            >
-              <CheckCheck className="h-3 w-3" /> Mark Selected Read ({selectedIds.size})
-            </Button>
-          )}
+        {/* ══════════════════════════════════════════════════════════════
+            Bulk Bar (only when there are items)
+        ══════════════════════════════════════════════════════════════ */}
+        {items.length > 0 && (
+          <div className="mb-4">
+            <NotificationBulkBar
+              totalOnPage={items.length}
+              selectedCount={selectedIds.size}
+              isAllPageSelected={isAllPageSelected}
+              isSomeSelected={isSomeSelected}
+              totalCount={totalCount}
+              isOperating={isBulkOperating}
+              onSelectAll={selectAllPage}
+              onMarkReadSelected={handleBulkMarkRead}
+              onClearSelected={clearSelected}
+            />
+          </div>
+        )}
 
-          <button
-            type="button"
-            onClick={() => {
-              setPage(1);
-              setFilter("all");
-            }}
-            className={cn(
-              "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer",
-              filter === "all"
-                ? "bg-brand text-white shadow-2xs"
-                : "text-text-secondary hover:text-text-primary hover:bg-surface-subtle"
-            )}
-          >
-            All Alerts
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setPage(1);
-              setFilter("unread");
-            }}
-            className={cn(
-              "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer",
-              filter === "unread"
-                ? "bg-brand text-white shadow-2xs"
-                : "text-text-secondary hover:text-text-primary hover:bg-surface-subtle"
-            )}
-          >
-            Unread Only ({unreadCount})
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <select
-            value={typeFilter}
-            onChange={(e) => {
-              setPage(1);
-              setTypeFilter(e.target.value);
-            }}
-            className="h-8 rounded-lg border border-border-base bg-surface px-2.5 text-xs font-medium text-text-primary focus:border-brand focus:outline-none cursor-pointer"
-          >
-            <option value="">All Categories</option>
-            <option value="announcement">Announcements</option>
-            <option value="policy">Policies</option>
-            <option value="leave">Leaves</option>
-            <option value="wfh">Work From Home (WFH)</option>
-            <option value="timesheet">Timesheets</option>
-            <option value="project">Projects</option>
-            <option value="task">Tasks</option>
-            <option value="support">Support</option>
-            <option value="system">System</option>
-          </select>
-        </div>
-      </Card>
-
-      {/* Main List */}
-      <Card className="p-4 border border-border-base bg-surface shadow-2xs rounded-xl space-y-2">
+        {/* ══════════════════════════════════════════════════════════════
+            Notification Feed
+        ══════════════════════════════════════════════════════════════ */}
         {loading ? (
-          <div className="py-16 text-center text-xs text-text-tertiary">
-            <div className="h-7 w-7 animate-spin rounded-full border-2 border-brand border-t-transparent mx-auto mb-2" />
+          <div className="py-20 text-center text-xs text-text-tertiary">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand border-t-transparent mx-auto mb-2" />
             Loading notifications...
           </div>
         ) : items.length === 0 ? (
-          <div className="py-16 text-center text-xs text-text-tertiary flex flex-col items-center justify-center">
+          <Card className="py-16 text-center text-xs text-text-tertiary flex flex-col items-center justify-center border-border-base bg-surface rounded-2xl shadow-2xs">
             <Inbox className="h-10 w-10 text-text-tertiary/40 mb-2" />
-            <p className="font-semibold text-text-secondary text-sm">No notifications found</p>
-            <p className="text-[11px] mt-0.5">Everything is up to date.</p>
-          </div>
+            <p className="font-semibold text-text-secondary text-sm">
+              {hasFilters ? "No notifications match your filters" : "All caught up!"}
+            </p>
+            <p className="text-[11px] mt-0.5">
+              {hasFilters
+                ? "Try adjusting your search or category filter."
+                : "New alerts for approvals, policies, and leaves will appear here."}
+            </p>
+            {hasFilters && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="mt-3 px-4 py-1.5 bg-surface-subtle hover:bg-border-base text-text-secondary rounded-xl text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors border border-border-base"
+              >
+                <X className="h-3 w-3" /> Clear Filters
+              </button>
+            )}
+          </Card>
         ) : (
-          <div className="space-y-2">
-            <AnimatePresence mode="popLayout">
-              {items.map((item) => (
-                <NotificationItemRow
-                  key={item.id}
-                  item={item}
+          <AnimatePresence mode="wait">
+            {viewMode === "list" ? (
+              <motion.div
+                key="list"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className="space-y-8"
+              >
+                {groups.map(({ group, items: groupItems }) => (
+                  <NotificationGroup
+                    key={group}
+                    group={group}
+                    items={groupItems}
+                    selectedIds={selectedIds}
+                    onToggleSelect={toggleSelect}
+                    onMarkRead={handleMarkRead}
+                    onDelete={handleDelete}
+                    onApprove={handleApprove}
+                    onReject={handleReject}
+                  />
+                ))}
+              </motion.div>
+            ) : (
+              <motion.div
+                key="card"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+              >
+                <NotificationCardGrid
+                  items={items}
+                  selectedIds={selectedIds}
+                  onToggleSelect={toggleSelect}
                   onMarkRead={handleMarkRead}
                   onDelete={handleDelete}
-                  isSelected={selectedIds.has(item.id)}
-                  onToggleSelect={toggleSelect}
+                  onApprove={handleApprove}
+                  onReject={handleReject}
                 />
-              ))}
-            </AnimatePresence>
-          </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         )}
 
-        {/* Pagination Controls */}
-        {totalPages > 1 && (
-          <div className="pt-4 border-t border-border-base flex items-center justify-between text-xs text-text-tertiary">
-            <span>
-              Page {page} of {totalPages} ({totalCount} total)
-            </span>
-            <div className="flex items-center gap-1.5">
-              <Button
-                variant="outline"
-                size="icon-sm"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1}
-                className="h-7 w-7 cursor-pointer"
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon-sm"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page >= totalPages}
-                className="h-7 w-7 cursor-pointer"
-              >
-                <ChevronRight className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          </div>
-        )}
-      </Card>
-    </div>
+        {/* ══════════════════════════════════════════════════════════════
+            Pagination
+        ══════════════════════════════════════════════════════════════ */}
+        <NotificationPagination
+          page={page}
+          totalPages={totalPages}
+          totalCount={totalCount}
+          pageSize={PAGE_SIZE}
+          onPageChange={(p) => {
+            setPage(p);
+            setSelectedIds(new Set());
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+        />
+      </motion.div>
+
+      {/* ══════════════════════════════════════════════════════════════
+          Mark All Read Confirmation Dialog
+      ══════════════════════════════════════════════════════════════ */}
+      <MarkAllReadDialog
+        open={markAllDialogOpen}
+        onClose={() => setMarkAllDialogOpen(false)}
+        onConfirm={handleMarkAllRead}
+        isLoading={isBulkOperating}
+        totalUnread={unreadCount}
+      />
+    </>
   );
 }
